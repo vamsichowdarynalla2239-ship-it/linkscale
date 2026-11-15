@@ -1,7 +1,7 @@
 # LinkScale: Production-Grade Multi-Tenant URL Engine & Distributed Analytics
 
 [![Live Demo — Coming Soon](https://img.shields.io/badge/Live_Demo-Coming_Soon-orange?style=for-the-badge&logo=railway)](#-live-cloud-deployment-runbook)
-[![CI Pipeline](https://img.shields.io/badge/CI-Passing-brightgreen?style=for-the-badge&logo=githubactions)](.github/workflows/ci.yml)
+[![CI Pipeline](https://github.com/vamsichowdarynalla2239-ship-it/linkscale/actions/workflows/ci.yml/badge.svg)](https://github.com/vamsichowdarynalla2239-ship-it/linkscale/actions)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-20.x-green?style=for-the-badge&logo=nodedotjs)](https://nodejs.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?style=for-the-badge&logo=postgresql)](https://www.postgresql.org/)
@@ -186,7 +186,7 @@ ALL MODULE 10 READINESS CHECKS PASSED (7/7)
 
 ### 1. Clone & Install
 ```bash
-git clone https://github.com/vamsi-satyadev/linkscale.git
+git clone https://github.com/vamsichowdarynalla2239-ship-it/linkscale.git
 cd linkscale
 npm install
 ```
