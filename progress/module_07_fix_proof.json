@@ -1,0 +1,9 @@
+{
+  "summary": "Restored eventId persistence in ClickWorker and verified database-level idempotency and deduplication.",
+  "evidence": [
+    "Restored eventId: job.eventId in click.worker.ts during prisma.clickEvent.create.",
+    "Executed verify-module-07.ts: confirmed duplicate job replay triggered P2002 constraint collision, returned status: deduplicated, and maintained click count at 3.",
+    "Validated 100% pass across all 8 checks including async ingestion, tenant isolation, zero raw IPs stored, queue-down drill, and 30-day retention purge."
+  ]
+}
+

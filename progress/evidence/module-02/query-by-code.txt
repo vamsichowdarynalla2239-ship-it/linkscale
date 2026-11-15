@@ -1,0 +1,7 @@
+Connecting to database...
+[SEED] Inserted code: acme-launch
+[SEED] Long URL: https://acme.example.com/products/launch-2026
+[QUERY] Selected code: acme-launch
+[QUERY] Matched long_url: https://acme.example.com/products/launch-2026
+[VERIFY] Query-by-code succeeded: code="acme-launch", matched_long_url="https://acme.example.com/products/launch-2026"
+[ANALYTICS] Inserted ClickEvent id=cmw3ofowx0004um13jtuw625y for linkId=cmw3ofowq0002um133nvbt27t

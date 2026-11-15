@@ -1,0 +1,9 @@
+{
+  "summary": "Diagnosed cache invalidation failure on link mutation causing stale redirects.",
+  "evidence": [
+    "Identified root cause: updateLink in link.service.ts omitted cacheService.invalidateRedirectTarget(existing.code), leaving stale public redirect keys active in Redis.",
+    "Observed symptom: PATCH /links/:id succeeded (HTTP 200), but GET /r/:code immediately returned stale URL with X-Cache: HIT.",
+    "Formulated diagnostic plan: inspect r:{code} key in Redis and restore active DEL eviction in updateLink immediately following DB transaction."
+  ]
+}
+

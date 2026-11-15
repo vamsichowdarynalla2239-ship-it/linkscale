@@ -1,0 +1,9 @@
+{
+  "summary": "Completed Module 04 Step 4 VERIFY: verified authentication vs authorization boundaries (401 vs 404), operational zero-downtime key rotation procedures, and edge-caching requirements for unauthenticated public redirects.",
+  "evidence": [
+    "Differentiated authentication (identity verification via 401) from authorization (permission scoping via 404 to eliminate IDOR enumeration).",
+    "Detailed zero-downtime credential rotation strategy using overlapping active keys in the 1:N ApiKey database schema with atomic revocation.",
+    "Explained latency and reachability requirements for keeping public redirect endpoints unauthenticated."
+  ]
+}
+

@@ -1,0 +1,160 @@
+{
+  "bootcamp": {
+    "current_module": 10,
+    "current_step": "reflect",
+    "module_01_complete": true,
+    "module_02_complete": true,
+    "module_03_complete": true,
+    "module_04_complete": true,
+    "module_05_complete": true,
+    "module_06_complete": true,
+    "module_07_complete": true,
+    "module_08_complete": true,
+    "module_09_complete": true,
+    "module_10_complete": true,
+    "bootcamp_complete": true,
+    "product_scenario": {
+      "slug": "b2b_multi_tenant",
+      "name": "B2B Multi-Tenant (Org + Venue Lens)",
+      "reasoning": "Focusing on strict tenant data isolation, preventing cross-tenant data leaks (IDOR bugs), audit logging, and tenant-scoped caching mirrors the real-world architectural challenges faced in production enterprise SaaS platforms."
+    },
+    "decisions": {
+      "module_01": {
+        "project_layout": "monorepo",
+        "choice": "B",
+        "api_root": "apps/api/",
+        "reasoning": "Service boundary for background jobs (apps/worker), shared domain logic and schemas (packages/shared), and long-term scaling for multi-tenant isolation."
+      },
+      "module_02": {
+        "database": "postgres",
+        "choice": "A",
+        "reasoning": "Strict multi-tenant referential integrity on tenant_id, avoiding 16MB document bloat for click analytics, and ACID unique constraints on short-code slugs."
+      },
+      "module_03": {
+        "redirect_style": "prefix_r",
+        "choice": "A",
+        "links_route": "links",
+        "redirect_prefix": "r",
+        "reasoning": "Namespace isolation between system routes and public redirects, eliminating route collisions and reserved word blocklists, while enabling edge proxies to route /r/* directly to high-throughput redirect clusters."
+      },
+      "module_04": {
+        "auth_method": "api_key",
+        "choice": "A",
+        "not_owner_status": 404,
+        "rate_limits": {
+          "create_link_per_min": 30,
+          "redirect_per_min": 120
+        },
+        "reasoning": "Optimized for B2B server-to-server integrations without token refresh overhead, and guarantees instant, atomic revocation in the database when credentials are leaked."
+      },
+      "module_05": {
+        "error_strategy": "graceful",
+        "choice": "B",
+        "reasoning": "Prioritize redirect SLA by falling back to primary DB on cache failure and isolating click telemetry asynchronously, while strictly failing fast on admin writes and auth."
+      },
+      "module_06": {
+        "cache_strategy": "cache_aside",
+        "choice": "A",
+        "constraints_twist_type": "org_scoping",
+        "constraints_twist_action": "implement_now",
+        "reasoning": "Cache-Aside prevents cache pollution from batch link generation, avoids out-of-order write race conditions via eviction on mutation, and decouples write latency and availability from Redis."
+      },
+      "module_07": {
+        "jobs_strategy": "async_queue",
+        "choice": "B",
+        "retention_days": 30,
+        "reasoning": "Asynchronous analytics via queue worker preserves sub-millisecond redirect latency by absorbing bursty clicks in Redis, avoids PostgreSQL connection pool exhaustion, and isolates heavy enrichment and batch persistence."
+      },
+      "module_08": {
+        "search_strategy": "db_native",
+        "choice": "A",
+        "max_page_size": 100,
+        "reasoning": "Database-native search guarantees immediate ACID read-your-own-writes consistency without CDC sync lag, enforces airtight multi-tenant query boundaries at the storage engine, and avoids secondary cluster operational overhead."
+      },
+      "module_09": {
+        "test_strategy": "integration_heavy",
+        "choice": "B",
+        "reasoning": "Integration-heavy testing validates full request lifecycles against real database constraints, P2002 collisions, multi-tenant query scoping, route precedence, and Redis cache eviction that mocks fundamentally mask."
+      },
+      "module_10": {
+        "deploy_strategy": "multi_service",
+        "choice": "B",
+        "migration_strategy": "one_off",
+        "reasoning": "Decoupling API and Worker into separate services isolates the sub-millisecond redirect event loop from analytics I/O, enables asymmetric queue-depth auto-scaling, and leverages the expand-and-contract migration pattern for zero-downtime rollouts."
+      }
+    },
+    "pretest": {
+      "os": "Windows (PowerShell)",
+      "tools": {
+        "node": "v22.17.1",
+        "npm": "10.9.2",
+        "git": "2.54.0.windows.1",
+        "curl": "8.21.0",
+        "python": "missing",
+        "docker": "missing"
+      },
+      "responses": {
+        "self_rating": "new",
+        "health_vs_readiness": "Understands liveness vs traffic readiness with container lifecycle",
+        "redirect_misuse": "Identified open redirect, phishing, reputation abuse, and credential harvesting",
+        "error_500_checks": "Identified application logs / stack traces and database/service connectivity",
+        "idempotency": "Understands safe retries in background jobs and preventing duplicate side-effects",
+        "database_index": "Option A - explained B-Tree O(log N) lookup vs O(N) full table scan",
+        "testing_style": "integration_heavy - catches wiring and database errors missed by isolated unit tests",
+        "environment": "prefers bash/WSL for POSIX compliance, working in Windows PowerShell"
+      },
+      "calibration": "Student answered conceptual questions with high precision and depth. Calibrate pace for fast progression with rigorous production edge cases."
+    },
+    "module_01_reflection": {
+      "core_problem": "Eliminated silent misconfiguration and environment drift through fail-fast boot validation",
+      "key_decision": "Monorepo layout isolating API from future background jobs with shared packages",
+      "evidence": "Fail-fast boot interruption on invalid PORT and HTTP 200 on /health"
+    },
+    "module_02_reflection": {
+      "core_problem": "Eliminated full table scans, race conditions, and orphaned multi-tenant data through relational schema integrity, cascading deletes, and unique B-Tree indexing",
+      "key_decision": "PostgreSQL (relational) with compound indexing on [tenantId, createdAt] and [tenantId, clickedAt] to guarantee isolation and prevent document bloat",
+      "evidence": "Clean point lookup query execution in query-by-code.txt and engine-level P2002 unique constraint violation on short code collisions"
+    },
+    "module_03_reflection": {
+      "core_problem": "Prevented open redirect vulnerabilities, stored XSS, and route collisions through strict Zod URL parsing and decoupled route namespaces",
+      "key_decision": "Prefix Route (/r/:code) isolating high-throughput redirect traffic from administrative CRUD endpoints for edge caching and zero route shadowing",
+      "evidence": "100% pass on verify-module-03.ts with 201 Created on POST /links, compliant 302 Location header redirection, and 10/10 URL abuse vector rejections with HTTP 400"
+    },
+    "module_04_reflection": {
+      "core_problem": "Prevented unauthenticated API abuse, cross-tenant data exposure (IDOR), and resource exhaustion through API key perimeter authentication, scoped database queries, and dual-tier rate limiting",
+      "key_decision": "API Key authentication paired with database-level tenant query scoping (where: { id, tenantId }) and 404 Not Found masking to eliminate IDOR enumeration",
+      "evidence": "100% pass on verify-module-04.ts: HTTP 401 on missing/invalid keys, HTTP 404 on cross-tenant link lookups, HTTP 302 unauthenticated redirects, and HTTP 429 throttling at 30 req/min per tenant and 120 req/min per IP"
+    },
+    "module_05_reflection": {
+      "core_problem": "Eliminated unpredictable error responses, blind incident debugging, and accidental credential/stack leaks through standardized error envelopes, end-to-end request tracing, and automated credential redaction",
+      "key_decision": "Graceful degradation on non-critical read/telemetry paths paired with end-to-end X-Request-Id correlation and strict 500 envelope sanitization",
+      "evidence": "100% pass on verify-module-05.ts: standardized 400/401/404/500 envelopes with matching X-Request-Id, zero leaked database connection strings or stack traces on 500 errors, and automated redaction of DO_NOT_LOG_ME_123 in structured JSON logs"
+    },
+    "module_06_reflection": {
+      "core_problem": "Eliminated database connection exhaustion and read latency bottlenecks on the redirect hot path through Redis caching while preventing stale reads via active eviction and maintaining high availability during Redis outages",
+      "key_decision": "Cache-Aside with active DEL eviction on PATCH/DELETE and graceful degradation to PostgreSQL, coupled with tenant-scoped metadata namespacing (tenant:{tenantId}:link:{id})",
+      "evidence": "100% pass on verify-module-06.ts: 0.96ms cache hit latency, immediate cache eviction on PATCH/DELETE, graceful fallback to PostgreSQL during simulated Redis outage with zero 500s, and verified tenant metadata isolation"
+    },
+    "module_07_reflection": {
+      "core_problem": "Eliminated coupling bottlenecks between sub-millisecond public redirects and heavy analytics persistence, while preventing duplicate click inflation across worker retries and enforcing automated data retention",
+      "key_decision": "Asynchronous Queue Processing (async_queue) with ingress-minted eventId uniqueness, storage-engine UNIQUE index constraint deduplication, and privacy-preserving salted SHA-256 IP hashing",
+      "evidence": "100% pass on verify-module-07.ts: asynchronous ingestion, 404 IDOR analytics isolation, exact-once deduplication on job replay, zero raw IPs stored, 0.81ms redirect under broker outage, and 30-day retention purge"
+    },
+    "module_08_reflection": {
+      "core_problem": "Eliminated full-table scans, memory exhaustion (unbounded page_size), query plan cache thrashing, and cross-tenant data leaks when searching and filtering short links at scale",
+      "key_decision": "Database-Native Search (db_native) with root-level tenantId query tree scoping, allowlisted dynamic sorting (sort_by), and defensive pagination bounds (page_size <= 100)",
+      "evidence": "100% pass on verify-module-08.ts: route precedence GET /links/search, substring and tag filtering, combined intersection, normalized pagination boundary verification across pages 1..4 ([2, 2, 1, 0] items), HTTP 400 rejection for page_size=500 and malicious sort_by, and verified zero cross-tenant leakage"
+    },
+    "module_09_reflection": {
+      "core_problem": "Eliminated the mock confidence gap and non-deterministic test state collisions by building an isolated, repeatable integration test harness against real persistence without staging/prod data leakage",
+      "key_decision": "Integration-Heavy Testing (integration_heavy) paired with pre-flight database safety guardrails (NODE_ENV=test) and dynamic UUID per-run namespace isolation (crypto.randomUUID())",
+      "evidence": "100% pass on verify-module-09.ts (npm test): pre-flight isolation guardrail, 302 redirects with Cache-Aside HIT/MISS, 401 auth perimeter, 404 IDOR owner masking across GET/PATCH/DELETE, 5 URL smuggling rejections (400), P2002 worker idempotency deduplication, 30-day retention purge, and back-to-back deterministic execution"
+    },
+    "module_10_reflection": {
+      "core_problem": "Eliminated silent production rollout failures, connection resets, and database restart storms by decoupling process liveness (/health) from dependency readiness (/ready), implementing graceful connection draining, tuning keep-alive proxy timeouts, and establishing reproducible multi-stage containerization.",
+      "key_decision": "Multi-Service Deployment (Option B: multi_service) paired with one-off expand-and-contract pre-deploy database migrations and schema-agnostic connection pool probing (SELECT 1).",
+      "evidence": "100% pass on verify-module-10.ts (7/7 checks) and run-final-demo.ts: 0.0.0.0 binding on PORT=3003, liveness HTTP 200, readiness HTTP 200 via SELECT 1, graceful in-flight request drainage, hardened Dockerfile, automated CI workflow, and verified lab-notebook.md.",
+      "operational_lesson": "Multi-service architecture delivers independent scalability and fault isolation between the redirect SLA and background analytics, but introduces distributed coordination overhead: each network boundary and probe requires strict, decoupled semantic contracts (vitality vs. dependency) to avoid cascading cluster-wide failures."
+    }
+  }
+}

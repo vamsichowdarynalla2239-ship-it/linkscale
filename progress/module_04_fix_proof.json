@@ -1,0 +1,9 @@
+{
+  "summary": "Completed Module 04 Step 6 FIX: remediated IDOR vulnerability by restoring tenant-scoped database predicate and verified regression pass.",
+  "evidence": [
+    "Patched link.service.ts getLinkById to enforce { id, tenantId: effectiveTenantId } via prisma.link.findFirst.",
+    "Ran scripts/verify-module-04.ts confirming cross-tenant access returns HTTP 404 Not Found, completely concealing resource existence.",
+    "Verified full 10-check regression pass covering unauthenticated 401s, IDOR defense, list isolation, public redirects, and dual-tier rate limiting (HTTP 429)."
+  ]
+}
+

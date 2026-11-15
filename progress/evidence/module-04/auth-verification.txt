@@ -1,0 +1,54 @@
+====================================================
+MODULE 04: MULTI-TENANCY, AUTH & RATE LIMIT SUITE
+====================================================
+
+[SERVER] Booted test server on http://localhost:3000
+
+--- 0. Seed Test Tenants and API Keys ---
+[SEED] Created Tenant A (id: cmwem3a7u0000h9vo9858uz8b) with Key: sk_live_acme...
+[SEED] Created Tenant B (id: cmwem3a820003h9vo25548b8r) with Key: sk_live_star...
+
+--- 1. Protected Endpoint Without Auth (Expect 401) ---
+GET /links (no auth) -> HTTP 401
+Response: {"error":{"code":"UNAUTHORIZED","message":"Unauthorized: Missing API Key","request_id":"req_08977a3f-7436-4336-8967-8feec0cb0c2c"}}
+
+--- 2. Protected Endpoint With Invalid Key (Expect 401) ---
+GET /links (bad key) -> HTTP 401
+
+--- 3. Protected Endpoint With Valid Key A (Expect 200) ---
+GET /links (Key A) -> HTTP 200
+Initial links for Tenant A: 0
+
+--- 4. Tenant A Creates Short Link (POST /links) ---
+POST /links (Tenant A) -> HTTP 201
+Created Link id: cmwem3ac50007h9vojmmuaq49, code: 8k4EWt1
+
+--- 5. Tenant A Accesses Own Link (GET /links/:id) ---
+GET /links/cmwem3ac50007h9vojmmuaq49 (Tenant A) -> HTTP 200
+Matched long_url: https://acme.example.com/confidential-launch
+
+--- 6. Tenant B Tries to Access Tenant A's Link (IDOR Test - Expect 404) ---
+GET /links/cmwem3ac50007h9vojmmuaq49 (Tenant B) -> HTTP 404
+Response: {"error":{"code":"NOT_FOUND","message":"Link not found","request_id":"req_3ec441b2-903f-4742-a485-1b88c9e6099d"}}
+[PASS] IDOR Defense verified: Cross-tenant resource hidden with 404 Not Found.
+
+--- 7. Tenant B Lists Links (Expect Isolated List) ---
+GET /links (Tenant B) -> Total found: 0
+[PASS] Multi-tenant list isolation verified: Tenant B sees 0 links.
+
+--- 8. Public Redirect Without Auth (GET /r/8k4EWt1) ---
+GET /r/8k4EWt1 (no auth) -> HTTP 302
+Location: https://acme.example.com/confidential-launch
+[PASS] Public redirect verified: Fast, unauthenticated, RFC 9110 compliant.
+
+--- 9. Rate Limiting Proof: POST /links (Limit: 30/min) ---
+[THROTTLED] Request #30 triggered HTTP 429 Too Many Requests (Retry-After: 60s)
+[PASS] Rate limiting verified: Tenant throttled at request #30 with HTTP 429.
+
+--- 10. Rate Limiting Proof: GET /r/:code (Limit: 120/min) ---
+[THROTTLED] Public redirect #120 triggered HTTP 429 Too Many Requests (Retry-After: 58s)
+[PASS] Redirect rate limiting verified: IP throttled at request #120 with HTTP 429.
+
+====================================================
+MODULE 04 VERIFICATION SUMMARY: ALL CHECKS PASSED!
+====================================================

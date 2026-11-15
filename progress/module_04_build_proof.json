@@ -1,0 +1,11 @@
+{
+  "summary": "Completed Module 04 Step 3 BUILD: implemented ApiKey model with SHA-256 hash verification, auth middleware returning 401 on unauthenticated management routes, strict tenant query scoping with 404 on cross-tenant requests, and dual-tier rate limiting (30/min for creation, 120/min for redirects) returning 429.",
+  "evidence": [
+    "Unauthenticated requests to /links returned HTTP 401 Unauthorized.",
+    "Valid API key requests returned HTTP 200 OK and created links scoped to the authenticated tenantId.",
+    "IDOR defense verified: Tenant B querying Tenant A's link returned HTTP 404 Not Found without leaking metadata.",
+    "Rate limiting verified: POST /links throttled at request #30 and GET /r/:code throttled at request #120 with HTTP 429.",
+    "Saved execution evidence to progress/evidence/module-04/auth-verification.txt."
+  ]
+}
+

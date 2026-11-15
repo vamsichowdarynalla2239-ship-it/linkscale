@@ -1,0 +1,9 @@
+{
+  "summary": "Diagnosed pagination off-by-one defect where 1-indexed page parameter was multiplied directly into 0-indexed database offset (skip = page * page_size), causing the first 20 records to be skipped on page 1.",
+  "evidence": [
+    "Symptom reproduced: GET /links/search?q=launch returned total: 2 but data: [] on page 1",
+    "Root cause isolated: skip = 1 * 20 = 20 bypassed all matching records for page 1",
+    "Fix formulated: normalize to 0-based offset using skip = (Math.max(1, page) - 1) * page_size"
+  ]
+}
+

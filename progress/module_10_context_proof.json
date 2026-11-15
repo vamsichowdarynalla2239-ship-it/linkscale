@@ -1,0 +1,9 @@
+{
+  "summary": "Completed Module 10 Step 1 CONTEXT micro-exercise, analyzing container networking interface isolation (0.0.0.0 vs 127.0.0.1) and dynamic PORT environment injection in cloud deployments.",
+  "evidence": [
+    "Container interface isolation: 127.0.0.1 binds exclusively to lo rejecting external eth0 proxy traffic with Connection refused and causing CrashLoopBackOff",
+    "Dynamic port injection: hardcoding ports causes platform reverse proxy health check timeouts (502 Bad Gateway) when process.env.PORT is ignored",
+    "Production standard: binding explicitly to app.listen(Number(process.env.PORT) || 3000, '0.0.0.0')"
+  ]
+}
+

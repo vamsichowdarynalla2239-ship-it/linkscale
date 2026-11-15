@@ -1,0 +1,11 @@
+{
+  "summary": "Selected B2B Multi-Tenant product scenario for system design build",
+  "evidence": [
+    "Selected b2b_multi_tenant scenario focusing on strict tenant isolation, IDOR prevention, auditability, and tenant-scoped caching",
+    "Recorded student product scenario choice and architectural reasoning in progress/state.json under bootcamp.product_scenario"
+  ],
+  "artifacts": [
+    "progress/state.json"
+  ]
+}
+

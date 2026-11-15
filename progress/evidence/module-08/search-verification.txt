@@ -1,0 +1,54 @@
+====================================================
+MODULE 08: SEARCH & ADVANCED QUERIES VERIFICATION
+====================================================
+
+[SERVER] Booted test server on http://localhost:3001
+
+--- 0. Seed Test Tenants and API Keys ---
+[SEED] Created Tenant A (cmwgrntu70000emmrfryyxjq2) and Tenant B (cmwgrntuh0001emmra9fic9cr) with active API keys.
+
+--- 1. Seed Links for Tenant A & Tenant B ---
+[SEED] Seeded 5 links for Tenant A with tags and synthetic click records.
+[SEED] Seeded 1 link for Tenant B: cmwgrnu1w001lemmrm0rdlae7 (https://rival.example.com/marketing/rival-launch-secret)
+
+--- 2. Route Precedence Check ---
+GET /links/search -> HTTP 200
+[PASS] Route precedence verified: /links/search is correctly resolved before /links/:id.
+
+--- 3. Substring Keyword Search (?q=launch) ---
+Search results count: 2, total: 2
+  - Code: 6IAwbC1, URL: https://acme.example.com/blog/q4-launch-recap, Clicks: 0
+  - Code: 3KdLXhp, URL: https://acme.example.com/blog/ai-search-launch-2026, Clicks: 5
+[PASS] Substring keyword search returned exact matching records for Tenant A.
+
+--- 4. Tag Filtering (?tag=marketing) ---
+Tag filter count: 2, total: 2
+[PASS] Tag filtering successfully isolated tagged links.
+
+--- 5. Combined Search (?q=ai&tag=marketing) ---
+Combined filter count: 1, total: 1
+[PASS] Combined search successfully intersected text search and tag filters.
+
+--- 6. Bounded Pagination Calculations ---
+Page 1: items=2, total=5, total_pages=3
+Page 2: items=2, total=5, total_pages=3
+Page 3: items=1, total=5, total_pages=3
+Page 4 (beyond end): items=0, total=5, total_pages=3
+[PASS] Pagination metadata and windowing verified without off-by-one errors.
+
+--- 7. Hard Ceiling Capping Verification (?page_size=500) ---
+GET /links/search?page_size=500 -> HTTP 400
+[PASS] page_size ceiling enforced: oversized pagination request rejected with HTTP 400.
+
+--- 8. Sorting Allowlist & Multi-Relation Sorting ---
+Top link by clicks: https://acme.example.com/pricing/enterprise-discount (clicks=12)
+Invalid sort parameter -> HTTP 400
+[PASS] Sorting allowlist verified: relation count sorting operational, unallowlisted columns rejected.
+
+--- 9. Strict Multi-Tenant Data Isolation ---
+Tenant B search (?q=launch) returned 1 links (total=1)
+[PASS] Multi-tenant isolation verified: zero cross-tenant leak across search and filtering.
+
+====================================================
+ALL MODULE 08 VERIFICATION CHECKS PASSED (8/8)
+====================================================

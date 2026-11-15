@@ -1,0 +1,9 @@
+{
+  "summary": "Diagnosed flaky test defect in Test 5 where a hardcoded static eventId collided with persistent records from previous test runs, causing Execution 1 to trigger P2002 deduplication instead of inserting successfully.",
+  "evidence": [
+    "Symptom reproduced: npm test failed on run 2 with 'Expected status success on initial job execution, got deduplicated'",
+    "Root cause isolated: hardcoded eventId clk_replay_static_shared_event persisted in ClickEvent across test runs",
+    "Remediation prescribed: mint unique eventId per run with crypto.randomUUID() and enforce clean test teardown"
+  ]
+}
+

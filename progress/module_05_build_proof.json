@@ -1,0 +1,11 @@
+{
+  "summary": "Completed Module 05 Step 3 BUILD: implemented uniform error envelopes, request ID tracing, structured JSON logging, and credential redaction.",
+  "evidence": [
+    "Built AppError hierarchy, requestIdMiddleware, loggingMiddleware, and globalErrorHandler in apps/api/src/.",
+    "Verified 400 validation, 401 auth, 404 not found, and 500 server errors return standard { error: { code, message, request_id } } envelope without leaking stack traces or internal secrets.",
+    "Executed sentinel test proving DO_NOT_LOG_ME_123 is masked with [REDACTED] in server stdout.",
+    "Validated structured log fields: timestamp, level, request_id, route, status_code, and latency_ms across all endpoints.",
+    "Captured full verification run in progress/evidence/module-05/error-logging-verification.txt."
+  ]
+}
+

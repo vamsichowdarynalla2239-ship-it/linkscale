@@ -1,0 +1,14 @@
+{
+  "summary": "Implemented database-native search (GET /links/search) with strict top-level tenant isolation, bounded pagination (max page_size 100), allowlisted sorting (created_at, expires_at, clicks), and substring/tag filtering. Ran verify-module-08.ts test harness passing all 8 checks.",
+  "evidence": [
+    "Route Precedence: GET /links/search correctly returns HTTP 200 before /links/:id without routing collision",
+    "Keyword Search: GET /links/search?q=launch successfully matched 2 links for Tenant A",
+    "Tag Filtering: GET /links/search?tag=marketing filtered 2 links for Tenant A",
+    "Combined Search: GET /links/search?q=ai&tag=marketing returned 1 link",
+    "Pagination Calculations: page=1, 2, 3 with page_size=2 returned 2, 2, 1 items respectively with total=5 and total_pages=3",
+    "Ceiling Enforcement: GET /links/search?page_size=500 rejected with HTTP 400 VALIDATION_ERROR",
+    "Sorting Allowlist: sort_by=clicks sorted top link with 12 clicks first; sort_by=malicious rejected with HTTP 400",
+    "Multi-Tenant Isolation: Tenant B searching q=launch returned 1 link, zero Tenant A links leaked"
+  ]
+}
+

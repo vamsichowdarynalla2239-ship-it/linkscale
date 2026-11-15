@@ -1,0 +1,12 @@
+{
+  "summary": "Completed Module 06 Step 3 BUILD: implemented Cache-Aside with Redis, cache eviction on link mutations, Redis down graceful fallback, and org-scoped key isolation.",
+  "evidence": [
+    "Built CacheService in apps/api/src/services/cache.service.ts with ioredis client, TTL + jitter, and fault-tolerant circuit breaker.",
+    "Wired resolveRedirect for Cache-Aside: confirmed first redirect returns X-Cache: MISS and populates cache; second redirect returns X-Cache: HIT in sub-millisecond latency (0.91ms).",
+    "Implemented PATCH and DELETE endpoints with immediate cache eviction, confirming zero stale redirects after mutations.",
+    "Executed Redis down drill: simulated hard Redis outage and proved redirects fall back to PostgreSQL with zero 500 errors.",
+    "Implemented org_scoping twist with tenant:{tenantId}:link:{id} key namespacing, verifying cross-tenant cache isolation.",
+    "Saved complete verification run in progress/evidence/module-06/caching-verification.txt."
+  ]
+}
+

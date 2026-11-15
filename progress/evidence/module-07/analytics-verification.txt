@@ -1,0 +1,66 @@
+====================================================
+MODULE 07: ASYNC JOBS, ANALYTICS & RETENTION SUITE
+====================================================
+
+[SERVER] Booted test server on http://localhost:3000
+
+--- 0. Seed Test Tenants and API Keys ---
+[SEED] Created Tenant A (cmwgq1lm60000m5m80b102eju) and Tenant B (cmwgq1lmh0001m5m8gjxxv5uh) with active API keys.
+
+--- 1. Create Initial Short Link (POST /links) ---
+POST /links -> HTTP 201
+Created Link id: cmwgq1lo30007m5m86cll5car, code: kh0slPu
+
+--- 2. Trigger Public Redirects (GET /r/kh0slPu) ---
+Redirect 1 -> HTTP 302, Location: https://acme.example.com/campaign/launch-2026
+Redirect 2 -> HTTP 302, Location: https://acme.example.com/campaign/launch-2026
+[QUEUE] Current pending click jobs in queue: 1
+
+--- 3. Background Worker Processing Click Jobs ---
+[WORKER] Processed 2 jobs. Statuses: success, success
+[DB] Verified click events in database: 2
+[PASS] Two redirects queued and successfully processed into PostgreSQL by background worker.
+
+--- 4. Protected Analytics Endpoint (GET /links/cmwgq1lo30007m5m86cll5car/analytics) ---
+GET /links/cmwgq1lo30007m5m86cll5car/analytics -> HTTP 200
+Response: {
+  "link_id": "cmwgq1lo30007m5m86cll5car",
+  "total_clicks": 2,
+  "last_clicked_at": "2026-11-14T18:10:48.460Z",
+  "time_window": {
+    "from": "2000-01-01T00:00:00.000Z",
+    "to": "2100-01-01T00:00:00.000Z"
+  }
+}
+[PASS] Protected analytics endpoint returned correct click count and recent timestamp.
+
+--- Cross-Tenant Analytics Isolation Check ---
+Tenant B reading Tenant A analytics -> HTTP 404
+[PASS] Multi-tenant isolation verified: Tenant B received 404 Not Found on Tenant A analytics.
+
+--- 5. Idempotency Proof: Replaying Duplicate Job Payload ---
+First job execution -> status: success
+Second job replay -> status: deduplicated
+[DB] Click count after duplicate replay: 3 (expected 3)
+[PASS] Idempotency verified: replayed job safely caught by unique constraint, zero double-counting.
+
+--- 6. Privacy & Anonymization Proof (GDPR/CCPA) ---
+ClickEvent id: cmwgq1lot0009m5m85rpmg402, ipHash: cfc7c16f7ebcdc05685514ce5f6d724054fb26058fd7ebf427ab83d12a437117
+ClickEvent id: cmwgq1loz000bm5m8ljm81uju, ipHash: cfc7c16f7ebcdc05685514ce5f6d724054fb26058fd7ebf427ab83d12a437117
+ClickEvent id: cmwgq1lpg000dm5m8gnriln2z, ipHash: 2ed116d96a65749e2f75eb8ac5f05c8a5a0eb1b56d488a263bf395642c1c6498
+[PASS] Privacy compliance verified: Salted SHA-256 ipHash stored; zero raw IP addresses in database.
+
+--- 7. Queue-Down Drill: Simulating Broker Outage ---
+Redirect during Queue outage -> HTTP 302, Location: https://acme.example.com/campaign/launch-2026
+[PASS] Queue-down drill verified: Redirect remained 100% available with zero HTTP 500 errors.
+
+--- 8. Data Retention Proof: Automated Purge of Expired Clicks ---
+Created test click record dated 60 days ago (id: cmwgq1lq2000hm5m8pn1sp3c0, clickedAt: 2026-09-15T18:10:48.506Z)
+Pre-purge click count: 4
+Purge executed with retention_days = 30 -> Deleted count: 1
+Post-purge click count: 3
+[PASS] Retention proof verified: 60-day-old record purged cleanly; recent records intact.
+
+====================================================
+MODULE 07 VERIFICATION SUMMARY: ALL CHECKS PASSED!
+====================================================

@@ -1,0 +1,10 @@
+{
+  "summary": "Remediated pagination off-by-one defect by normalizing 1-indexed page parameter to 0-indexed database offset using (Math.max(1, page) - 1) * page_size, and extended test harness with boundary checks across pages 1..4.",
+  "evidence": [
+    "Offset calculation fixed in link.service.ts: const skip = (Math.max(1, page) - 1) * page_size",
+    "Boundary tests added in verify-module-08.ts testing pages 1..4 for 5 total items with page_size=2",
+    "Regression verification passed: Page 1 (2 items), Page 2 (2 items), Page 3 (1 item), Page 4 (0 items)",
+    "Confirmed zero cross-tenant leaks and strict HTTP 400 ceiling enforcement for page_size=500"
+  ]
+}
+

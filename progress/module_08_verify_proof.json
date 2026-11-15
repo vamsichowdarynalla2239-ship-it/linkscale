@@ -1,0 +1,9 @@
+{
+  "summary": "Verified core database search and query design principles including SQL injection prevention, strict page_size bounding, and operational tradeoffs of dedicated search engines.",
+  "evidence": [
+    "SQL concatenation risks: SQL injection, cross-tenant data exfiltration bypassing WHERE tenant_id, and query plan cache thrashing",
+    "page_size ceiling necessity: prevention of Node.js event-loop blocking, OOM crashes from massive JSON payloads, and PostgreSQL connection pool starvation",
+    "Search engine operational tradeoffs: dual-write index drift, eventual consistency lag breaking read-your-own-writes, and cluster maintenance/JVM overhead"
+  ]
+}
+

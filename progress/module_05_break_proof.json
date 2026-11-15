@@ -1,0 +1,9 @@
+{
+  "summary": "Completed Module 05 Step 5 BREAK: diagnosed critical information leak defect where HTTP 500 error envelope included raw stack property.",
+  "evidence": [
+    "Observed regression failure: GET /debug/simulate-error returned HTTP 500 containing raw database connection string and file paths in stack property.",
+    "Formulated root-cause hypothesis: error.middleware.ts explicitly serialized err.stack into envelope.error instead of keeping stack traces internal.",
+    "Captured diagnostic output in progress/evidence/module-05/break-failure.txt."
+  ]
+}
+

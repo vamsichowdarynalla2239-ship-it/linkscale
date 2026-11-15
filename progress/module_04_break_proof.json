@@ -1,0 +1,8 @@
+{
+  "summary": "Completed Module 04 Step 5 BREAK: diagnosed IDOR vulnerability where cross-tenant GET /links/:id returned HTTP 200 instead of HTTP 404.",
+  "evidence": [
+    "Observed regression failure: GET /links/:id (Tenant B) returned HTTP 200 containing Tenant A confidential long_url instead of 404.",
+    "Formulated root-cause hypothesis: link.service.ts or controller performed unscoped findUnique query on id alone without scoping to tenantId.",
+    "Captured full diagnostic trace in progress/evidence/module-04/break-failure.txt."
+  ]
+}

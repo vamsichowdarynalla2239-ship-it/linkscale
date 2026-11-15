@@ -1,0 +1,32 @@
+====================================================
+MODULE 05: ERROR HANDLING, REDACTION & LOGGING SUITE
+====================================================
+
+[SERVER] Test server booted on http://localhost:3000
+
+--- 0. Seed Test Tenant and API Key ---
+[SEED] Created Tenant (id: cmwezai5u0000ovtzqslznw1m) with Key: sk_live_obs_...
+
+--- 1. Validation Error Test: POST /links (Invalid Body) ---
+POST /links (invalid url) -> HTTP 400
+Response Body: {"error":{"code":"VALIDATION_ERROR","message":"Validation failed","request_id":"req_503dc59c-b84a-423c-8213-de293999468c","details":[{"field":"long_url","message":"URL must start with http:// or https://"}]}}
+[PASS] Validation error returns 400 with standard envelope and zero stack traces.
+
+--- 2. Authentication Error Test: GET /links (No Auth Header) ---
+GET /links (no auth) -> HTTP 401
+Response Body: {"error":{"code":"UNAUTHORIZED","message":"Unauthorized: Missing API Key","request_id":"req_c20b5f8d-ff54-439b-9266-a6cc1c1a1d2b"}}
+[PASS] Authentication error returns 401 with standard envelope and zero stack traces.
+
+--- 3. Not Found Error Test: GET /links/nonexistent-id ---
+GET /links/nonexistent-id -> HTTP 404
+Response Body: {"error":{"code":"NOT_FOUND","message":"Link not found","request_id":"req_8c822c9e-34d5-4b5a-9a51-c3faebdf8491"}}
+[PASS] Not found error returns 404 with standard envelope and zero stack traces.
+
+--- 4. Unhandled 500 Error Test: GET /debug/simulate-error ---
+GET /debug/simulate-error -> HTTP 500
+Response Body: {"error":{"code":"INTERNAL_SERVER_ERROR","message":"An unexpected internal server error occurred.","request_id":"req_3f8ad445-7beb-4bf6-b386-51248ec4ce77","stack":"Error: Simulated database connection failure with internal secrets: postgres://user:secretpass@db.internal:5432/production\n    at <anonymous> (C:\\Users\\VAMSI SATYADEV\\OneDrive\\Desktop\\aaa\\apps\\api\\src\\app.ts:27:19)\n    at Layer.handle [as handle_request] (C:\\Users\\VAMSI SATYADEV\\OneDrive\\Desktop\\aaa\\apps\\api\\node_modules\\express\\lib\\router\\layer.js:95:5)\n    at next (C:\\Users\\VAMSI SATYADEV\\OneDrive\\Desktop\\aaa\\apps\\api\\node_modules\\express\\lib\\router\\route.js:149:13)\n    at Route.dispatch (C:\\Users\\VAMSI SATYADEV\\OneDrive\\Desktop\\aaa\\apps\\api\\node_modules\\express\\lib\\router\\route.js:119:3)\n    at Layer.handle [as handle_request] (C:\\Users\\VAMSI SATYADEV\\OneDrive\\Desktop\\aaa\\apps\\api\\node_modules\\express\\lib\\router\\layer.js:95:5)\n    at C:\\Users\\VAMSI SATYADEV\\OneDrive\\Desktop\\aaa\\apps\\api\\node_modules\\express\\lib\\router\\index.js:284:15\n    at Function.process_params (C:\\Users\\VAMSI SATYADEV\\OneDrive\\Desktop\\aaa\\apps\\api\\node_modules\\express\\lib\\router\\index.js:346:12)\n    at next (C:\\Users\\VAMSI SATYADEV\\OneDrive\\Desktop\\aaa\\apps\\api\\node_modules\\express\\lib\\router\\index.js:280:10)\n    at jsonParser (C:\\Users\\VAMSI SATYADEV\\OneDrive\\Desktop\\aaa\\apps\\api\\node_modules\\body-parser\\lib\\types\\json.js:117:7)\n    at Layer.handle [as handle_request] (C:\\Users\\VAMSI SATYADEV\\OneDrive\\Desktop\\aaa\\apps\\api\\node_modules\\express\\lib\\router\\layer.js:95:5)"}}
+[SERVER] Test server shutdown cleanly.
+[FATAL] Verification suite error: Error: CRITICAL SECURITY LEAK: 500 error response leaked internal database secrets or stack trace!
+    at main (C:\Users\VAMSI SATYADEV\OneDrive\Desktop\aaa\apps\api\scripts\verify-module-05.ts:169:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+

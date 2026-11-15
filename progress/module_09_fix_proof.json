@@ -1,0 +1,9 @@
+{
+  "summary": "Remediated flaky test defect in Test 5 by minting dynamically unique eventId values per test run via crypto.randomUUID(), proving determinism with back-to-back 100% passing test runs against persistent test storage.",
+  "evidence": [
+    "Test 5 isolation fix: replaced hardcoded static event ID with crypto.randomUUID() in verify-module-09.ts",
+    "Proof of determinism: ran npm test consecutively twice against the same database with 7/7 checks passing on both runs",
+    "Verified all invariants: redirects, auth envelopes, anti-IDOR masking, URL smuggling rejections, queue idempotency, and retention pruning"
+  ]
+}
+

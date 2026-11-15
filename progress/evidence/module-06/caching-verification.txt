@@ -1,0 +1,52 @@
+====================================================
+MODULE 06: REDIS CACHING, EVICTION & FALLBACK SUITE
+====================================================
+
+[SERVER] Booted test server on http://localhost:3000
+
+--- 0. Seed Test Tenant and API Key ---
+[SEED] Created Tenant A (cmwf0k3bs000011hhc808fofb) and Tenant B (cmwf0k3c5000311hh8aefu7ce)
+
+--- 1. Create Initial Short Link (POST /links) ---
+POST /links -> HTTP 201
+Created Link id: cmwf0k3dy000711hhqg10w7lb, code: D8RkkDc
+
+--- 2. First Redirect (GET /r/D8RkkDc): Expect Cache MISS ---
+Redirect 1 -> HTTP 302, Location: https://acme.example.com/v1/original-campaign, X-Cache: MISS
+[PASS] First redirect successfully read from DB and populated cache (X-Cache: MISS).
+
+--- 3. Second Redirect (GET /r/D8RkkDc): Expect Cache HIT ---
+Redirect 2 -> HTTP 302, Location: https://acme.example.com/v1/original-campaign, X-Cache: HIT (3.81ms)
+[PASS] Second redirect served directly from cache (X-Cache: HIT).
+
+--- 4. Update Link Destination (PATCH /links/cmwf0k3dy000711hhqg10w7lb) ---
+PATCH /links/cmwf0k3dy000711hhqg10w7lb -> HTTP 200
+Updated long_url: https://acme.example.com/v2/new-destination-page
+[PASS] Link updated in database; cache key evicted.
+
+--- 5. Third Redirect (GET /r/D8RkkDc): Verify Zero Stale Data ---
+Redirect 3 -> HTTP 302, Location: https://acme.example.com/v2/new-destination-page, X-Cache: MISS
+[PASS] Zero stale data: redirect immediately resolved to updated URL (X-Cache: MISS).
+
+--- 6. Fourth Redirect (GET /r/D8RkkDc): Confirm New URL is Cached ---
+Redirect 4 -> HTTP 302, Location: https://acme.example.com/v2/new-destination-page, X-Cache: HIT
+[PASS] Updated URL cached successfully (X-Cache: HIT).
+
+--- 7. Delete Link (DELETE /links/cmwf0k3dy000711hhqg10w7lb): Expect Eviction ---
+DELETE /links/cmwf0k3dy000711hhqg10w7lb -> HTTP 204
+Redirect 5 (after delete) -> HTTP 404
+[PASS] Deleted link evicted: subsequent redirect immediately returns 404 Not Found.
+
+--- 8. Redis Down Drill: Simulating Redis Outage ---
+Created Link during Redis outage: code=5A1fM7q
+Redirect during Redis outage -> HTTP 302, Location: https://acme.example.com/resilience-proof
+[PASS] Redis down drill verified: System degraded gracefully to DB, zero 500 errors.
+
+--- 9. Org Scoping Twist: Verify Tenant-Scoped Cache Isolation ---
+Tenant A Cache Lookup: FOUND
+Tenant B Cache Lookup: BLOCKED (NULL)
+[PASS] Org scoping verified: Tenant B isolated from Tenant A cached metadata.
+
+====================================================
+MODULE 06 VERIFICATION SUMMARY: ALL CHECKS PASSED!
+====================================================

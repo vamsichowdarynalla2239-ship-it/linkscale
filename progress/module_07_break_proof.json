@@ -1,0 +1,9 @@
+{
+  "summary": "Diagnosed idempotency deduplication failure in background worker click persistence.",
+  "evidence": [
+    "Identified root cause: click.worker.ts omitted eventId during prisma.clickEvent.create, inserting NULL and bypassing unique constraint deduplication.",
+    "Observed symptom: replaying duplicate click job payload resulted in status: success and duplicate database row instead of status: deduplicated.",
+    "Formulated diagnostic check: inspect worker persistence call and verify ClickEvent rows for NULL or missing eventId values."
+  ]
+}
+

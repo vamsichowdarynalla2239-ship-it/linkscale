@@ -1,0 +1,37 @@
+====================================================
+MODULE 04: MULTI-TENANCY, AUTH & RATE LIMIT SUITE
+====================================================
+
+[SERVER] Booted test server on http://localhost:3000
+
+--- 0. Seed Test Tenants and API Keys ---
+[SEED] Created Tenant A (id: cmwekktgx000013982ltj9cgs) with Key: sk_live_acme...
+[SEED] Created Tenant B (id: cmwekkthf00031398wc7g85v0) with Key: sk_live_star...
+
+--- 1. Protected Endpoint Without Auth (Expect 401) ---
+GET /links (no auth) -> HTTP 401
+Response: {"error":"Unauthorized: Missing API Key"}
+
+--- 2. Protected Endpoint With Invalid Key (Expect 401) ---
+GET /links (bad key) -> HTTP 401
+
+--- 3. Protected Endpoint With Valid Key A (Expect 200) ---
+GET /links (Key A) -> HTTP 200
+Initial links for Tenant A: 0
+
+--- 4. Tenant A Creates Short Link (POST /links) ---
+POST /links (Tenant A) -> HTTP 201
+Created Link id: cmwekktm200071398bw485m8o, code: JcYhjfF
+
+--- 5. Tenant A Accesses Own Link (GET /links/:id) ---
+GET /links/cmwekktm200071398bw485m8o (Tenant A) -> HTTP 200
+Matched long_url: https://acme.example.com/confidential-launch
+
+--- 6. Tenant B Tries to Access Tenant A's Link (IDOR Test - Expect 404) ---
+GET /links/cmwekktm200071398bw485m8o (Tenant B) -> HTTP 200
+Response: {"id":"cmwekktm200071398bw485m8o","code":"JcYhjfF","short_url":"http://localhost:3000/r/JcYhjfF","long_url":"https://acme.example.com/confidential-launch","created_at":"2026-11-13T06:02:15.146Z","expires_at":null,"tags":[]}
+[SERVER] Test server shutdown cleanly.
+[FATAL] Verification suite error: Error: IDOR VULNERABILITY DETECTED! Expected 404 Not Found, got 200
+    at main (C:\Users\VAMSI SATYADEV\OneDrive\Desktop\aaa\apps\api\scripts\verify-module-04.ts:129:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+

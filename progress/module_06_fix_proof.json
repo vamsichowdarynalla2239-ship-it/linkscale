@@ -1,0 +1,9 @@
+{
+  "summary": "Restored active cache invalidation in updateLink and verified end-to-end Cache-Aside eviction with zero stale data.",
+  "evidence": [
+    "Restored cacheService.invalidateRedirectTarget(existing.code) in updateLink within link.service.ts immediately following PostgreSQL commit.",
+    "Ran verify-module-06.ts regression test: confirmed Redirect 3 yielded X-Cache: MISS with updated destination URL https://acme.example.com/v2/new-destination-page.",
+    "Validated subsequent Redirect 4 yielded X-Cache: HIT with updated URL, and DELETE /links/:id evicted cache resulting in immediate 404 Not Found."
+  ]
+}
+

@@ -1,0 +1,54 @@
+====================================================
+MODULE 09: INTEGRATION, CONCURRENCY & CHAOS SUITE
+====================================================
+
+[GUARDRAIL] Pre-flight isolation verified: NODE_ENV=test, DB=file:./dev.db
+[SERVER] Test API server online on http://localhost:3002
+
+--- 0. Setup: Seed Multi-Tenant Principals ---
+[SEED] Created Tenant A (cmwguo8tm0000nwiuek69gv5d) and Tenant B (cmwguo8ts0001nwiu04kbo65l)
+
+--- 1. Link Creation & Prefix Redirection (GET /r/:code) ---
+POST /links -> HTTP 201, code: 2LUAJPw
+GET /r/2LUAJPw (1st) -> HTTP 302, Location: https://acme.example.com/products/release-2026, X-Cache: MISS
+GET /r/2LUAJPw (2nd) -> HTTP 302, X-Cache: HIT
+[PASS] Test 1: Link created and public redirect validated.
+
+--- 2. Authentication Perimeter & Error Envelopes ---
+POST /links (Missing Key) -> HTTP 401
+POST /links (Invalid Key) -> HTTP 401
+[PASS] Test 2: Authentication perimeter enforced with standardized 401 error envelope.
+
+--- 3. Anti-IDOR Owner Scoping (HTTP 404 on Cross-Tenant Access) ---
+Tenant B GET /links/cmwguo8w50007nwiuae5s2hwo -> HTTP 404
+Tenant B PATCH /links/cmwguo8w50007nwiuae5s2hwo -> HTTP 404
+Tenant B DELETE /links/cmwguo8w50007nwiuae5s2hwo -> HTTP 404
+[PASS] Test 3: Anti-IDOR owner scoping enforced across GET, PATCH, and DELETE.
+
+--- 4. URL Validation & Smuggling Vectors (HTTP 400) ---
+Rejection test: [Backslash Smuggling] -> HTTP 400
+Rejection test: [JavaScript Protocol] -> HTTP 400
+Rejection test: [CRLF Injection] -> HTTP 400
+Rejection test: [Userinfo Credentials] -> HTTP 400
+Rejection test: [Illegal Protocol (FTP)] -> HTTP 400
+[PASS] Test 4: All 5 URL smuggling and protocol abuse vectors rejected with HTTP 400.
+
+--- 5. Queue Worker Replay Idempotency (Exact-Once Persistence) ---
+Worker Execution 1: status=success, processed=true
+Worker Execution 2 (Replay): status=deduplicated, processed=true
+Database ClickEvent count for eventId clk_replay_test_9ca4c01c-9e37-4381-95a4-0bdb49fef453: 1
+[PASS] Test 5: Worker idempotency and P2002 deduplication verified.
+
+--- 6. Data Retention Policy & Automated Pruning ---
+[SEED] Created 45-day-old click (clk_expired_8280329b-a8b0-46aa-8de0-8dd4e9ac1368) and 2-day-old click (clk_active_cecab17e-4f6a-4849-ab71-0d55c2288a34).
+Purge executed (30-day cutoff: 2026-10-15T20:20:23.529Z): deleted=1
+[PASS] Test 6: Automated 30-day retention pruning successfully isolated and purged expired records.
+
+--- 7. Route Precedence & Bounded Pagination ---
+GET /links/search -> HTTP 200
+GET /links/search?page_size=500 -> HTTP 400
+[PASS] Test 7: Route precedence and page_size hard limit ceiling verified.
+
+====================================================
+ALL MODULE 09 INTEGRATION TESTS PASSED (7/7)
+====================================================

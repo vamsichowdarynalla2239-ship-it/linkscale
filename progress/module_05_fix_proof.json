@@ -1,0 +1,9 @@
+{
+  "summary": "Completed Module 05 Step 6 FIX: sanitized HTTP 500 responses by removing raw stack serialization and verified regression pass.",
+  "evidence": [
+    "Patched apps/api/src/middleware/error.middleware.ts to suppress stack trace serialization from ErrorEnvelope and globalErrorHandler.",
+    "Ran scripts/verify-module-05.ts confirming HTTP 500 on /debug/simulate-error returns generic INTERNAL_SERVER_ERROR with request_id and zero leaked secrets.",
+    "Verified full regression suite pass: 100% on validation 400, auth 401, not found 404, server 500, sentinel credential redaction, and structured JSON logs."
+  ]
+}
+
