@@ -1,0 +1,9 @@
+{
+  "summary": "Formulated hypotheses for intermittent pagination duplicates under concurrent write load in Module 01 Step 5 BREAK.",
+  "evidence": [
+    "Identified symptom: intermittent duplicate records across page boundaries under concurrent insertion load.",
+    "Formulated Hypothesis 1: Relational sort instability due to timestamp ties across concurrent inserts without a deterministic unique tie-breaker (e.g. orderBy: [{ createdAt: 'desc' }, { id: 'desc' }]).",
+    "Formulated Hypothesis 2: Offset-based window drift where prepending records shifts the dataset indices relative to static OFFSET math.",
+    "Recorded hypotheses in progress/state.json and progress/module-01-diagnosis.md."
+  ]
+}

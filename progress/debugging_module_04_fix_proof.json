@@ -1,0 +1,8 @@
+{
+  "summary": "Completed Module 04 Fix: eliminated ReDoS catastrophic backtracking (CWE-1333) by replacing nested quantifier regex with deterministic WHATWG standard URL parser and strict 2048-char bounds, verified with sub-100ms response on pathological repeating payload.",
+  "evidence": [
+    "apps/api/src/schemas/link.schema.ts validated with linear-time new URL() parser and input length guards",
+    "apps/api/scripts/verify-module-04-debug.ts TEST 5 passed: pathological input http://example.com/a*30! handled in 88ms without CPU stall",
+    "progress/module-04-diagnosis.md updated with ReDoS forensic breakdown and benchmark data"
+  ]
+}

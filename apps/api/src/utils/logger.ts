@@ -1,3 +1,5 @@
+import { getEffectiveLogLevel } from '../config/logger.config';
+
 const SENSITIVE_KEYS = new Set([
   'authorization',
   'x-api-key',
@@ -14,7 +16,15 @@ const SENSITIVE_KEYS = new Set([
 ]);
 
 /**
- * Recursively deep-clones an object and redacts any sensitive keys.
+ * Neutralizes CRLF Log Injection (CWE-117) by escaping CR and LF characters.
+ */
+export function sanitizeLogString(val: string): string {
+  if (typeof val !== 'string') return val;
+  return val.replace(/\r/g, '\\r').replace(/\n/g, '\\n');
+}
+
+/**
+ * Recursively deep-clones an object, redacts sensitive keys, and sanitizes CRLF log injection.
  */
 export function redactSensitiveData(obj: any): any {
   if (obj === null || obj === undefined) {
@@ -22,11 +32,10 @@ export function redactSensitiveData(obj: any): any {
   }
 
   if (typeof obj === 'string') {
-    // If a string contains common header patterns like "Bearer <token>", redact the token
     if (obj.toLowerCase().startsWith('bearer ')) {
       return 'Bearer [REDACTED]';
     }
-    return obj;
+    return sanitizeLogString(obj);
   }
 
   if (Array.isArray(obj)) {
@@ -43,6 +52,8 @@ export function redactSensitiveData(obj: any): any {
         redacted[key] = redactSensitiveData(value);
       } else if (typeof value === 'string' && lowerKey.includes('key')) {
         redacted[key] = '[REDACTED]';
+      } else if (typeof value === 'string') {
+        redacted[key] = sanitizeLogString(value);
       } else {
         redacted[key] = value;
       }
@@ -53,7 +64,14 @@ export function redactSensitiveData(obj: any): any {
   return obj;
 }
 
-export type LogLevel = 'info' | 'warn' | 'error' | 'debug';
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+export const LEVEL_PRIORITY: Record<LogLevel, number> = {
+  debug: 0,
+  info: 1,
+  warn: 2,
+  error: 3,
+};
 
 export interface LogEntry {
   timestamp: string;
@@ -68,14 +86,32 @@ export interface LogEntry {
 }
 
 class Logger {
+  private inMemoryBuffer: LogEntry[] = [];
+  private maxBufferSize = 500;
+
+  public shouldLog(level: LogLevel, activeLevel: LogLevel = getEffectiveLogLevel()): boolean {
+    return LEVEL_PRIORITY[level] >= LEVEL_PRIORITY[activeLevel];
+  }
+
   private log(level: LogLevel, message: string, context: Record<string, any> = {}): void {
+    const activeLevel = getEffectiveLogLevel();
+    if (!this.shouldLog(level, activeLevel)) {
+      return;
+    }
+
     const sanitizedContext = redactSensitiveData(context);
     const entry: LogEntry = {
-      timestamp: new Date().toISOString(),
+      timestamp: new Date().toISOString(), // Strictly UTC ISO-8601
       level,
-      message,
+      message: sanitizeLogString(message), // Neutralize CRLF in message
       ...sanitizedContext,
     };
+
+    // Store in ring buffer for inspection & testing
+    this.inMemoryBuffer.push(entry);
+    if (this.inMemoryBuffer.length > this.maxBufferSize) {
+      this.inMemoryBuffer.shift();
+    }
 
     const jsonString = JSON.stringify(entry);
 
@@ -103,7 +139,14 @@ class Logger {
   debug(message: string, context?: Record<string, any>): void {
     this.log('debug', message, context);
   }
+
+  getBuffer(): LogEntry[] {
+    return [...this.inMemoryBuffer];
+  }
+
+  clearBuffer(): void {
+    this.inMemoryBuffer = [];
+  }
 }
 
 export const logger = new Logger();
-

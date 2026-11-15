@@ -1,0 +1,10 @@
+{
+  "summary": "Completed blameless structural rewrite of the broken migration postmortem, eliminating individual scapegoating and establishing automated pipeline guardrails.",
+  "evidence": [
+    "Authored complete blameless rewrite in progress/postmortem-migration-rewrite.md.",
+    "Transformed root cause from individual blame ('John deployed without testing') into structural systems language: 'The deployment automation pipeline permitted a destructive database schema migration to execute against production without pre-flight validation... dropping the primary query index and causing sequential table scans.'",
+    "Replaced personal inactions with 4 systemic contributing factors: lack of ephemeral migration dry-runs in CI, absence of CODEOWNERS review gates on migrations, absence of automated canary rollbacks, and lack of automated deployment lock schedules.",
+    "Formulated 4 owned, deadlined, and measurable remediation items changing the toolchain rather than requesting human vigilance.",
+    "Re-verified our primary postmortem in progress/postmortem-inc-2024-0315-01.md to ensure zero blind spots."
+  ]
+}

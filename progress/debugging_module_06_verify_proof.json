@@ -1,0 +1,10 @@
+{
+  "summary": "Verified Module 06 multi-layer bug mechanics: mapped 12-step causal chain with 3-layer subsystem gap, analyzed development invisibility factors for Bug #9, and identified earliest queue retry rate alert for Bug #10.",
+  "evidence": [
+    "Causal Chain (Bug #10): Exactly 12 steps: 1) Queue job fails -> 2) Immediate retry (0s backoff) -> 3) DB connection checked out from shared pool -> 4) Retry fails -> 5) Immediate retry (no retry limit/DLQ) -> 6) Unthrottled tight loop -> 7) Shared connection pool 100% exhausted (20/20) -> 8) API handlers blocked waiting for DB connection -> 9) API requests hang -> 10) Entire API unresponsive -> 11) /ready probe (SELECT 1) times out -> 12) Load balancer evicts pods causing total outage.",
+    "Longest Gap: Crosses 3 complete subsystem boundaries: async queue worker layer -> shared DB connection pool sockets -> synchronous HTTP API & readiness probe layer.",
+    "Bug #9 Development Invisibility: Asymmetric CRUD usage (developers create/read constantly, rarely delete), silent self-healing (5-minute TTL naturally expires giving illusion of working deletion), and siloed component testing where DB, cache, and HTTP handlers pass unit tests while missing cross-layer eviction contract.",
+    "Single Earliest Monitoring Alert: rate(queue_job_retries_total[1m]) > 5/sec (Step 2 in causal chain). Alerting on queue retry rate catches the runaway loop before pool utilization rises, preventing cascading propagation to API.",
+    "Red Flags Avoided: Rejected lowering cache TTL (stale data for 30s is still unacceptable; explicit eviction is mandatory) and rejected increasing connection pool size (merely delays exhaustion from 5s to 30s without curing retry storm)."
+  ]
+}

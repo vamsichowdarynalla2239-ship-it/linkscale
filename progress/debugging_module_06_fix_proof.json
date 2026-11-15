@@ -1,0 +1,10 @@
+{
+  "summary": "Resolved cache key collision by isolating redirect resolution (link:redirect:<code_id>) and worker deduplication (analytics:dedup:<event_id>) into distinct namespaces.",
+  "evidence": [
+    "Diagnosed root cause of duplicate analytics: redirect cache and deduplication flag previously shared key namespace; invalidating redirect cache on delete wiped deduplication records, causing re-created links to double-process.",
+    "Decoupled Redis namespaces: redirect resolution isolated to link:redirect:<short_code> and worker deduplication isolated to analytics:dedup:<eventId>.",
+    "Updated ClickWorker to check and set analytics:dedup:<eventId>; verified link deletion purges link:redirect:<code> without affecting analytics:dedup:<eventId>.",
+    "Verified duplicate event replay: re-executing processed event returned status: deduplicated; click count double-counting eliminated 100%.",
+    "Regression suite apps/api/scripts/verify-module-06-debug.ts passed all test cases covering Bug #9, Bug #10, and namespace isolation."
+  ]
+}

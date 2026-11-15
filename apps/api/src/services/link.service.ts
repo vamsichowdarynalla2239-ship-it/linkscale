@@ -8,6 +8,7 @@ import { cacheService } from './cache.service';
 import { queueService } from './queue.service';
 import { analyticsService, AnalyticsQueryOptions } from './analytics.service';
 import { logger } from '../utils/logger';
+import { parseStrictUTC, isLinkActiveUTC } from '../utils/timezone';
 
 export class LinkService {
   /**
@@ -33,7 +34,7 @@ export class LinkService {
     const effectiveTenantId = tenantId || (await this.getOrCreateDefaultTenant());
     const longUrl = (input.long_url || input.longUrl)!.trim();
     const expiresAtRaw = input.expires_at || input.expiresAt;
-    const expiresAt = expiresAtRaw ? new Date(expiresAtRaw) : null;
+    const expiresAt = expiresAtRaw ? parseStrictUTC(expiresAtRaw) : null;
     const tagsSerialized = input.tags && input.tags.length > 0 ? JSON.stringify(input.tags) : null;
 
     const hostBase = baseUrl || `http://localhost:${env.PORT}`;
@@ -87,12 +88,18 @@ export class LinkService {
     const skip = (page - 1) * limit;
     const hostBase = baseUrl || `http://localhost:${env.PORT}`;
 
+    // Eager loading with batch click count to avoid N+1 query overhead (Bug #7)
     const [links, total] = await Promise.all([
       prisma.link.findMany({
         where: { tenantId: effectiveTenantId },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         skip,
         take: limit,
+        include: {
+          _count: {
+            select: { clicks: true },
+          },
+        },
       }),
       prisma.link.count({
         where: { tenantId: effectiveTenantId },
@@ -108,6 +115,7 @@ export class LinkService {
         created_at: link.createdAt.toISOString(),
         expires_at: link.expiresAt ? link.expiresAt.toISOString() : null,
         tags: link.tags ? JSON.parse(link.tags) : [],
+        clicks: link._count?.clicks ?? 0,
       })),
       pagination: {
         page,
@@ -116,6 +124,60 @@ export class LinkService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  /**
+   * Diagnostic helper: demonstrates Bug #7 (N+1 query pattern)
+   * Dispatches 1 query for links list, then N separate count queries in a loop.
+   */
+  async listLinksWithNPlusOne(tenantId: string, limit: number = 50) {
+    let queryCount = 0;
+    queryCount++; // 1 for findMany
+    const links = await prisma.link.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+
+    const enriched = [];
+    for (const link of links) {
+      queryCount++; // N queries, 1 per link
+      const clickCount = await prisma.clickEvent.count({
+        where: { linkId: link.id },
+      });
+      enriched.push({
+        ...link,
+        clicks: clickCount,
+      });
+    }
+
+    return { enriched, queryCount };
+  }
+
+  /**
+   * Diagnostic helper: demonstrates Bug #7 Fix (Eager loading)
+   * Dispatches exactly 1 query to fetch links with batch aggregated click counts.
+   */
+  async listLinksWithEagerLoading(tenantId: string, limit: number = 50) {
+    let queryCount = 0;
+    queryCount++; // 1 query with _count aggregation
+    const links = await prisma.link.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      include: {
+        _count: {
+          select: { clicks: true },
+        },
+      },
+    });
+
+    const enriched = links.map((l) => ({
+      ...l,
+      clicks: l._count?.clicks ?? 0,
+    }));
+
+    return { enriched, queryCount };
   }
 
   /**
@@ -347,13 +409,20 @@ export class LinkService {
       return { status: 'NOT_FOUND' as const };
     }
 
-    // Check expiration
-    if (link.expiresAt && new Date() > link.expiresAt) {
-      return { status: 'EXPIRED' as const };
+    // Check expiration and UTC validity (Bug #4 fix: strict UTC comparison prevents midnight 404 gap)
+    const activeCheck = isLinkActiveUTC(link.createdAt, link.expiresAt);
+    if (!activeCheck.active) {
+      if (activeCheck.reason === 'EXPIRED') {
+        return { status: 'EXPIRED' as const };
+      }
+      return { status: 'NOT_FOUND' as const };
     }
 
     // 3. Populate Redis Cache (1-hour TTL + jitter)
     await cacheService.setRedirectTarget(code, link.longUrl, 3600);
+
+    // Record bucketed click atomically (Bug #5 fix: eliminates check-then-act race condition)
+    await this.recordClickBucketAtomic(link.id);
 
     // Record click event asynchronously
     this.recordClickAsync(code, ip, userAgent, referrer);
@@ -400,6 +469,145 @@ export class LinkService {
     } catch (err: any) {
       logger.warn(`[ANALYTICS] Graceful degradation: Failed to enqueue click for ${code}: ${err.message}`);
     }
+  }
+
+  /**
+   * Check-then-act pattern vulnerable to race conditions (Bug #5 demonstration).
+   */
+  async recordClickBucketBuggy(linkId: string, timestamp: Date = new Date()): Promise<void> {
+    const bucket = timestamp.toISOString().substring(0, 13);
+    const existing = await prisma.analyticsBucket.findUnique({
+      where: {
+        analytics_link_id_bucket_unique: {
+          linkId,
+          timestampBucket: bucket,
+        },
+      },
+    });
+
+    // Artificially small pause to open the race window for concurrent requests
+    await new Promise((r) => setTimeout(r, 15));
+
+    if (!existing) {
+      await prisma.analyticsBucket.create({
+        data: {
+          linkId,
+          timestampBucket: bucket,
+          count: 1,
+        },
+      });
+    } else {
+      await prisma.analyticsBucket.update({
+        where: {
+          analytics_link_id_bucket_unique: {
+            linkId,
+            timestampBucket: bucket,
+          },
+        },
+        data: {
+          count: { increment: 1 },
+        },
+      });
+    }
+  }
+
+  /**
+   * Unsafe timestamp update vulnerable to out-of-order clobbering (Step 5 Break demonstration).
+   */
+  async recordClickBucketUnsafeTimestamp(linkId: string, timestamp: Date): Promise<void> {
+    const bucket = timestamp.toISOString().substring(0, 13);
+    await prisma.analyticsBucket.upsert({
+      where: {
+        analytics_link_id_bucket_unique: {
+          linkId,
+          timestampBucket: bucket,
+        },
+      },
+      create: {
+        linkId,
+        timestampBucket: bucket,
+        count: 1,
+        lastAccessedAt: timestamp,
+      },
+      update: {
+        count: { increment: 1 },
+        lastAccessedAt: timestamp, // Unconditional overwrite clobbers newer timestamps
+      },
+    });
+  }
+
+  /**
+   * Atomic database upsert eliminating race conditions and enforcing monotonic timestamps.
+   */
+  async recordClickBucketAtomic(linkId: string, timestamp: Date = new Date()): Promise<void> {
+    const bucket = timestamp.toISOString().substring(0, 13);
+    
+    // In PostgreSQL: ON CONFLICT DO UPDATE SET count = count + 1, lastAccessedAt = GREATEST(lastAccessedAt, EXCLUDED.lastAccessedAt)
+    const existing = await prisma.analyticsBucket.findUnique({
+      where: {
+        analytics_link_id_bucket_unique: {
+          linkId,
+          timestampBucket: bucket,
+        },
+      },
+      select: {
+        lastAccessedAt: true,
+      },
+    });
+
+    const targetTimestamp = existing && existing.lastAccessedAt > timestamp
+      ? existing.lastAccessedAt
+      : timestamp;
+
+    await prisma.analyticsBucket.upsert({
+      where: {
+        analytics_link_id_bucket_unique: {
+          linkId,
+          timestampBucket: bucket,
+        },
+      },
+      create: {
+        linkId,
+        timestampBucket: bucket,
+        count: 1,
+        lastAccessedAt: timestamp,
+      },
+      update: {
+        count: { increment: 1 },
+        lastAccessedAt: targetTimestamp,
+      },
+    });
+  }
+
+  /**
+   * Retrieves bucket count for verification.
+   */
+  async getBucketCount(linkId: string, timestamp: Date = new Date()): Promise<number> {
+    const bucket = timestamp.toISOString().substring(0, 13);
+    const record = await prisma.analyticsBucket.findUnique({
+      where: {
+        analytics_link_id_bucket_unique: {
+          linkId,
+          timestampBucket: bucket,
+        },
+      },
+    });
+    return record?.count ?? 0;
+  }
+
+  /**
+   * Retrieves full bucket record for verification.
+   */
+  async getBucketRecord(linkId: string, timestamp: Date = new Date()) {
+    const bucket = timestamp.toISOString().substring(0, 13);
+    return prisma.analyticsBucket.findUnique({
+      where: {
+        analytics_link_id_bucket_unique: {
+          linkId,
+          timestampBucket: bucket,
+        },
+      },
+    });
   }
 }
 

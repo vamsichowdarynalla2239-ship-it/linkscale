@@ -1,0 +1,9 @@
+{
+  "summary": "Completed Module 04 Build: diagnosed and resolved Bug #6 (connection pool leak on error paths) using guaranteed finally cleanup, and Bug #7 (N+1 query bottleneck on /links) using eager loading batch aggregation.",
+  "evidence": [
+    "apps/api/src/utils/pool.ts implemented with executeSafe finally block",
+    "apps/api/src/services/link.service.ts updated with eager batch count loading for listLinks",
+    "apps/api/scripts/verify-module-04-debug.ts executed with 100% pass: reproduced pool exhaustion, verified 2,000 operations with 0 leaks, demonstrated 98% query reduction (51 -> 1 queries) for 50 links, and verified sub-200ms HTTP API response",
+    "progress/module-04-diagnosis.md written with profiling benchmarks and SQL queries"
+  ]
+}

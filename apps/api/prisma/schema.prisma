@@ -39,8 +39,21 @@ model Link {
   expiresAt DateTime?
   tags      String?
   clicks    ClickEvent[]
+  buckets   AnalyticsBucket[]
 
   @@index([tenantId, createdAt(sort: Desc)])
+}
+
+model AnalyticsBucket {
+  id              String   @id @default(cuid())
+  linkId          String
+  timestampBucket String
+  count           Int      @default(1)
+  lastAccessedAt  DateTime @default(now())
+  link            Link     @relation(fields: [linkId], references: [id], onDelete: Cascade)
+
+  @@unique([linkId, timestampBucket], name: "analytics_link_id_bucket_unique")
+  @@index([linkId])
 }
 
 model ClickEvent {

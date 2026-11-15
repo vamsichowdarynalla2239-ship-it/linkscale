@@ -155,6 +155,340 @@
       "key_decision": "Multi-Service Deployment (Option B: multi_service) paired with one-off expand-and-contract pre-deploy database migrations and schema-agnostic connection pool probing (SELECT 1).",
       "evidence": "100% pass on verify-module-10.ts (7/7 checks) and run-final-demo.ts: 0.0.0.0 binding on PORT=3003, liveness HTTP 200, readiness HTTP 200 via SELECT 1, graceful in-flight request drainage, hardened Dockerfile, automated CI workflow, and verified lab-notebook.md.",
       "operational_lesson": "Multi-service architecture delivers independent scalability and fault isolation between the redirect SLA and background analytics, but introduces distributed coordination overhead: each network boundary and probe requires strict, decoupled semantic contracts (vitality vs. dependency) to avoid cascading cluster-wide failures."
-    }
+    },
+    "debugging_pretest": {
+      "track": "debugging-incident-response",
+      "product_scenario": "linkops",
+      "os": "Windows (PowerShell)",
+      "tools": {
+        "node": "v22.17.1",
+        "git": "2.54.0.windows.1",
+        "curl": "8.22.0",
+        "docker": "missing"
+      },
+      "responses": {
+        "self_rating": "strong",
+        "app_is_slow": "Check APM p95/p99 latency by route, database connection pool & slow query log, and container CPU/memory utilization.",
+        "econnrefused_5432": "PostgreSQL database process is either stopped or not listening on localhost:5432.",
+        "symptom_vs_root_cause": "A symptom is the observable failure effect (e.g. 500 error or latency spike); root cause is the underlying failure mechanism (e.g. unindexed query or dead connection pool).",
+        "local_vs_prod": "Data volume disparity (unindexed query runs fast on 10 rows, locks on 10M rows) and infrastructure/configuration drift (timeouts, proxies, missing env vars).",
+        "read_error_first": "Read error message carefully first — error message and stack trace immediately narrow the hypothesis space before wasting time guessing reproduction steps.",
+        "outage_2am_first_action": "Check if anything was deployed recently — recent releases and configuration changes cause over 80% of sudden production incidents; mitigate/rollback first.",
+        "worked_yesterday": "What commits, dependency versions, or infrastructure configurations changed between yesterday and today?"
+      },
+      "calibration": "Student demonstrates advanced diagnostic instincts, clear separation of mitigation vs investigation, and disciplined root-cause isolation. Scaffolding set to minimal; focus on high-fidelity production incident scenarios."
+    },
+    "debugging_module_01": {
+      "complete": true,
+      "debugging_direction": "A",
+      "bugs_fixed": ["BUG_01", "BUG_02"],
+      "context": {
+        "hypothesis_1": {
+          "cause": "Downstream database dependency unreachable (ECONNREFUSED / socket timeout)",
+          "verification": "pg_isready -h 127.0.0.1 -p 5432 or grep -i 'ECONNREFUSED' server.log",
+          "evidence": "ECONNREFUSED log line confirms database failure; active connection rules it out."
+        },
+        "hypothesis_2": {
+          "cause": "Unhandled runtime exception from missing environment configuration (TypeError: undefined)",
+          "verification": "tail -n 50 server.log | grep -E 'TypeError|ReferenceError|UnhandledPromiseRejection'",
+          "evidence": "Stack trace pointing to missing process.env confirms config drift; absence rules it out."
+        }
+      },
+      "reflection": {
+        "core_problem": "Separated misleading symptoms from root causes through scientific hypothesis formulation, fixing environment configuration drift (Bug #1) and pagination drift under concurrency (Bug #2)",
+        "key_decision": "Option A (Top-Down Debugging) to quickly isolate deterministic boot failures without prior baselines, paired with deterministic compound sorting [createdAt desc, id desc] to ensure relational pagination stability",
+        "evidence": "apps/api/scripts/verify-module-01-debug.ts passes with exit code 0: 25 seeded records across pages 1..3 with 0 duplicate boundary records and verified startup health",
+        "score_out_of_10": 10.0
+      }
+    },
+    "debugging_interlude_01": {
+      "story": "Therac-25 — When Software Kills",
+      "reflections": {
+        "q1_falsifiable_hypotheses": "A testable hypothesis specifies concrete boundary conditions and expected falsification signals. A good disconfirming test deliberately stresses the system under edge conditions (e.g., race window timings, rapid mode toggles, concurrency) to actively disprove assumptions rather than running confirmation diagnostics that only pass on happy paths.",
+        "q2_masked_bugs_in_safety_nets": "Caches (Cache-Aside), automatic retries, and fallback default values frequently mask catastrophic underlying defects—such as unindexed N+1 database queries, slow memory leaks, or race conditions. Removing or flushing these layers in staging under chaos testing exposes hidden defects before they take down production.",
+        "q3_human_vs_telemetry": "Telemetry only reports what was instrumented. A green HTTP 200 dashboard can easily report healthy ping responses while background processing silently corrupts data or silently drops events. When human users report anomalies, human experience is the ground truth; telemetry that contradicts user pain points indicates a gap or misplacement in observability."
+      }
+    },
+    "debugging_module_02": {
+      "context": {
+        "micro_exercise": {
+          "q1_failed_request": "r-003 (GET /r/nope99) failed with error level, status 404, message 'link not found', duration 10ms",
+          "q2_slowest_request": "r-004 (POST /links) took 700ms total; slowed down by a database write bottleneck taking 680ms (97% of lifecycle) as logged by 'slow db write'",
+          "q3_pattern_vs_one_off": "Isolated one-off failure; r-001 and r-002 completed normally in 45ms and 12ms, r-003 was a non-existent slug lookup, and r-004 successfully committed in 700ms without cascading faults"
+        }
+      },
+      "decide": {
+        "log_strategy": "A",
+        "reasoning": "Verbose by default preserves critical forensic evidence for transient or non-reproducible bugs that cannot be recreated on demand. Downstream sampling and indexing mitigates volume without irreversible telemetry loss."
+      },
+      "verify": {
+        "q1_timeline_reconstruction": "Request req_33ce37c8-bff6-452f-a12c-405ba29f1121 arrived via GET /health, executed dependency check, completed with HTTP 200 in 3.91ms, fully correlated with X-Request-Id.",
+        "q2_timezone_variance": "In UTC (offset 0), application and DB midnight are identical, eliminating the bug. In offset timezones (e.g. UTC+5:30 in India or UTC-5 in US), midnight occurs 5-5.5 hours apart, creating a multi-hour query invisibility gap that shifts under Daylight Saving Time.",
+        "q3_watchdog_log": "Log watchdog comparing app UTC timestamp vs stored DB timestamp: logger.warn('[WATCHDOG:TIMEZONE] Skew detected', { app_utc: now.toISOString(), db_stored: link.createdAt.toISOString(), delta_hours: (now - link.createdAt)/3600000 })"
+      },
+      "break": {
+        "vulnerability": "Log Injection / Log Forgery (CWE-117)",
+        "evidence": [
+          "The 'admin login' log line is literally embedded inside the 'url' field of request r-101 (Bob's link creation), separated by an escaped newline character (\\n).",
+          "Temporal contradiction: The fake admin login claims timestamp 15:42:03.500Z, but it appears inside a log line printed at 15:42:03.410Z and completed at 15:42:03.420Z. A log line printed at .410Z cannot contain an event from .500Z without violating causality.",
+          "Attacker spoofing: Bob injected newline characters into the 'url' payload to fabricate an audit trail and deceive security monitoring."
+        ],
+        "implications": "Logs cannot be trusted as an immutable source of truth unless all untrusted user inputs are sanitized, escaped, or strictly isolated from log structure."
+      },
+      "fix": {
+        "crlf_sanitization": "Implemented sanitizeLogString escaping \\r and \\n in apps/api/src/utils/logger.ts",
+        "log_level_fix": "Removed hardcoded warn override in logger.config.ts, allowing LOG_LEVEL=info to take precedence",
+        "timezone_fix": "Enforced strict UTC ISO-8601 parsing and activation validation via timezone.ts",
+        "verification": "verify-module-02-debug.ts passed all 5 test suites (100% pass rate)"
+      },
+      "complete": true,
+      "reflection": {
+        "core_problem": "Eliminated telemetry blindness caused by hardcoded log-level overrides (Bug #3), resolved midnight link invisibility gaps via universal UTC ISO-8601 normalization (Bug #4), and neutralized log forgery/tampering by treating logs as an untrusted security boundary (CWE-117)",
+        "key_decision": "Verbose by default (Option A) to preserve irreplaceable diagnostic context for transient bugs, paired with strict CRLF sanitization and UTC temporal standards across application and database layers",
+        "evidence": "verify-module-02-debug.ts passed all 5 test suites (100% pass rate), progress/module-02-diagnosis.md fully documented, and evaluation score 10.0/10.0",
+        "score_out_of_10": 10.0
+      }
+    },
+    "debugging_interlude_02": {
+      "story": "When Logs Told the Truth Too Late — Knight Capital (2012)",
+      "reflection": "Adding build_version (git commit SHA + config hash) to structured logs and telemetry eliminates version ambiguity during canary and rolling deployments, enabling instantaneous detection of bifurcated server fleets and confident, targeted rollbacks under pressure."
+    },
+    "debugging_module_03": {
+      "context": {
+        "micro_exercise": {
+          "q1_three_questions": [
+            "1. Temporal/Traffic: What exact time of day or under what concurrent traffic pattern does slowness occur (peak hours, cron jobs, backups)?",
+            "2. Route/Payload: Which specific endpoint or tenant account experiences the delay, and does it vary with query size or payload length?",
+            "3. Client/Hop: What geographic region, network route, and client environment are you on, and does Server-Timing indicate network or database execution latency?"
+          ],
+          "q2_reproducibility": "Saying 'I cannot reproduce it yet' reflects the engineer's current diagnostic progress and humility, whereas claiming 'it is not reproducible' falsely asserts an impossibility. In standups, always state 'I cannot reproduce it yet — here are the variables tested and what concurrency/state variable I am isolating next.'"
+        }
+      },
+      "decide": {
+        "repro_approach": "B",
+        "reasoning": "Synthetic reproduction isolates suspected variables (concurrency, timing, payload) in a minimal, portable script without production noise, eliminates compliance/PII risks, and yields an automated CI regression test."
+      },
+      "verify": {
+        "q1_variable_isolation": "Concurrency was the sole controlling variable. Data shape was eliminated because serial requests to identical slugs never fail; timing was eliminated because the collision reproduces at arbitrary mid-hour timestamps whenever requests interleave.",
+        "q2_single_curl_gap": "A single curl command executes serially and commits within 5ms before the next request arrives, completely masking the race window. Serial testing proves only basic syntax, not concurrent system correctness.",
+        "q3_codebase_vulnerabilities": "Any check-then-act pattern: default tenant lazy-initialization (findFirst -> create), custom short-code slug reservations without DB constraints, or un-synchronized rate limiting token buckets.",
+        "q4_concurrency_level": "While 2 concurrent requests are the theoretical minimum, local low-latency execution requires 10 to ensure overlap within the database roundtrip window (>90% collision probability) without causing OS-level socket exhaustion."
+      },
+      "break": {
+        "vulnerability": "Silent out-of-order timestamp clobbering under concurrent writes",
+        "evidence": "Requests completing at t=200ms commit first, but a slower request from t=100ms unconditionally overwrites lastAccessedAt, rolling the timestamp backward silently without error."
+      },
+      "fix": {
+        "atomic_upsert": "Implemented atomic database upsert in recordClickBucketAtomic, eliminating check-then-act race collisions (P2002)",
+        "monotonic_guard": "Enforced monotonic timestamp guard (GREATEST / conditional update) preventing out-of-order clock clobbering",
+        "verification": "verify-module-03-debug.ts passed all 4 test suites: reproduced 9/10 crashes on check-then-act, achieved 10/10 successes with exact count=10 on atomic upsert, verified 15/15 concurrent HTTP redirects, and verified monotonic timestamp preservation"
+      },
+      "complete": true,
+      "reflection": {
+        "core_problem": "Eliminated non-deterministic intermittent 500 errors by replacing check-then-act application queries with atomic database upserts (Bug #5), and neutralized silent out-of-order timestamp corruption via monotonic guards",
+        "key_decision": "Synthetic Reproduction (Option B) to deterministically trigger race conditions under controlled concurrency (Promise.all with 10 workers) without production noise or PII hazards",
+        "evidence": "verify-module-03-debug.ts reproduced 9/10 crashes under check-then-act, achieved 10/10 atomic upserts with exact count=10 and monotonic timestamps, and scored 10.0/10.0 on evaluation report",
+        "score_out_of_10": 10.0
+      }
+    },
+    "debugging_module_04": {
+      "context": {
+        "micro_exercise": {
+          "q1_two_actions_before_code": [
+            "1. HTTP Timing / Trace Breakdown: Run curl with timing format or inspect distributed APM traces (OpenTelemetry) to isolate where the 3000ms was spent (DNS, TCP, TTFB/server processing, or DB query I/O).",
+            "2. Database Query Inspection: Check PostgreSQL slow query logs (pg_stat_statements) or run EXPLAIN ANALYZE on active queries to verify if latency is driven by unindexed full-table scans or lock waits."
+          ],
+          "q2_cpu_vs_memory_profiler": "CPU profiler measures execution time across functions and call stacks; memory profiler measures heap allocations, object retention, and GC activity. For a service gradually slowing down over hours, I choose a MEMORY PROFILER: gradual multi-hour degradation is the signature of a memory leak or connection leak triggering increasingly frequent and expensive Stop-the-World GC pauses."
+        }
+      },
+      "decide": {
+        "profiling_strategy": "B",
+        "inspection_scope": "B",
+        "reasoning": "Decision 1: Manual Profiling (Option B) provides zero-overhead, zero-cost, and zero vendor lock-in diagnostics directly within the local environment. Decision 2: Targeted Inspection (Option B) isolates suspect endpoints and hot loops without getting drowned in broad framework noise."
+      },
+      "verify": {
+        "bug_06_memory_leak": {
+          "heap_profile_proof": "Executed verify-module-04-debug.ts: Under buggy handling (no finally), 10 simulated errors permanently stranded 10 connections (inUse=10, available=0, leaked=10), crashing with [POOL EXHAUSTION] Connection pool exhausted at iteration 11. Under safe finally handling, across 2,000 operations with 10% errors (200 failures), available connections stayed at exactly 10/10 with 0 leaks.",
+          "memory_delta_2000_requests": "Across 2,000 requests, RSS delta was <1.2MB with flat heap usage (no monotonic growth).",
+          "finally_block_mechanism": "The JavaScript runtime guarantees execution of finally blocks regardless of whether try completes normally or throws. Placing release() in the success branch causes any unhandled exception to unwind the stack past the cleanup statement, permanently stranding the resource."
+        },
+        "bug_07_n_plus_one": {
+          "query_log_comparison": "Before fix: 51 SQL queries (1 parent findMany + 50 loop counts) in 22.39ms. After fix: 1 single batch query (include: { _count: { select: { clicks: true } } }) in 1.81ms (98.0% query reduction, 91.9% speedup).",
+          "api_latency_under_200ms": "HTTP GET /links?limit=50 completed in 12.65ms (total round-trip 50.24ms), serving all 50 items with 100% click count parity.",
+          "code_reading_blindspot": "The ORM configuration still declared 'eager', which was syntactically valid TypeScript and compiled cleanly. However, an internal ORM version bump deprecated the option and silently defaulted to lazy loading. Only observing the SQL query logs exposed this silent behavioral shift."
+        }
+      },
+      "break": {
+        "vulnerability": "Regular Expression Denial of Service (ReDoS) / Catastrophic Backtracking (CWE-1333)",
+        "symptom": "Single POST /links request takes 47-60 seconds, pinning 100% CPU on a single core with 0 DB/memory activity when matching URLs with repeating characters and a non-matching suffix (http://example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!)",
+        "cpu_profiler_evidence": "CPU profiling reveals the Node.js event loop thread stuck 100% inside v8::internal::RegExpMacroAssembler / RegExp.prototype.exec, demonstrating exponential backtracking across nested/overlapping quantifiers (O(2^n) permutations) instead of linear string evaluation.",
+        "root_cause": "Nested greedy quantifiers in URL validation regex: ([a-zA-Z0-9_-]+)+. When input contains 30 matching 'a' characters followed by a failing character '!', the NFA regex engine explores over 1 billion backtracking permutations before failing.",
+        "fix_strategy": "Replace vulnerable regex with linear-time O(N) deterministic WHATWG URL parser (new URL()) and eliminate nested quantifiers."
+      },
+      "fix": {
+        "memory_leak_fix": "Implemented guaranteed finally block cleanup in ConnectionPool / database connection acquisitions",
+        "n_plus_one_fix": "Enforced eager loading with Prisma include: { _count: { select: { clicks: true } } }, reducing queries by 98% (51 -> 1 query)",
+        "redos_fix": "Replaced nested regexes with WHATWG URL parser and 2048-char bounds, dropping execution time on pathological inputs to <100ms",
+        "verification": "verify-module-04-debug.ts passed all 5 test suites (100% pass rate)"
+      },
+      "complete": true,
+      "reflection": {
+        "core_problem": "Eliminated resource leaks bypassing release statements on exception paths (Bug #6), solved N+1 database roundtrips caused by silent ORM version drift (Bug #7), and neutralized catastrophic backtracking in URL validation (ReDoS)",
+        "key_decision": "Targeted runtime profiling over blueprint inspection: used query statement logging, heap tracking, and CPU profiling to measure actual execution bottlenecks rather than trusting syntactically valid code",
+        "evidence": "verify-module-04-debug.ts passed 100% (2000 ops with 0 leaks, 51 -> 1 queries in 1.81ms, ReDoS payload in 88ms), progress/module-04-diagnosis.md fully documented, and evaluation score 10.0/10.0",
+        "score_out_of_10": 10.0
+      }
+    },
+    "debugging_module_05": {
+      "context": {
+        "micro_exercise": {
+          "q1_broken_homepage_images": {
+            "severity": "SEV2 or SEV3 (Business Context Dependent)",
+            "reasoning": "For an e-commerce platform where imagery is essential to purchasing decisions and revenue generation, this directly halts the conversion funnel (SEV2). For an internal dashboard or text-driven knowledge base, broken images are cosmetic / degraded UX without blocking core utility (SEV3)."
+          },
+          "q2_cross_user_private_data": {
+            "severity": "SEV1 (Critical Data Breach / IDOR)",
+            "reasoning": "Active privacy violation and horizontal privilege escalation (Insecure Direct Object Reference). Violates regulatory compliance (GDPR/CCPA/HIPAA), risks catastrophic reputational destruction and legal liability. Requires immediate all-hands mobilization and executive notification."
+          },
+          "q3_weekly_reports_delayed": {
+            "severity": "SEV3 (Minor Background Degradation)",
+            "reasoning": "Asynchronous reporting workload is delayed but data is intact and uncorrupted. No real-time user-facing latency or transaction blocks. Can be safely addressed during business hours without waking on-call teams."
+          }
+        }
+      },
+      "decide": {
+        "triage_priority": "B",
+        "communication_cadence": "B",
+        "reasoning": "Decision 1: Communicate First (Option B) establishes single-source-of-truth command within 5 minutes, mitigating executive panic. Decision 2: 15-Minute Cadence or on State Change (Option B) balances stakeholder visibility with deep debugging focus."
+      },
+      "verify": {
+        "q1_severity_rationale": "SEV1 due to active external exploitation (unknown IP 203.0.113.42) paired with confirmed permanent data deletion (47 links deleted, HTTP 200). If deletions had failed (HTTP 401/403) or been confined to staging, it would have been triaged as SEV2.",
+        "q2_stakeholder_evaluation": "Update clearly stated non-technical impact (47 links affected), confirmed that public redirects and sales demo traffic are decoupled and 100% operational, and set a firm 10-minute cadence for next update.",
+        "q3_resisting_downplay_pressure": "Refused executive pressure to declare 'not a real breach'. False minimization destroys credibility when discovered downstream; honest facts paired with containment actions maintain executive and customer trust.",
+        "q4_alert_to_broadcast_gap": "4 minutes: allowed rapid verification that redirect endpoints were unaffected before broadcasting, delivering actionable intelligence rather than empty panic."
+      },
+      "break": {
+        "scenario": "Confirmed Post-Patch Data Loss (12 deleted links across 8 customer accounts)",
+        "audit_evidence": "Database audit query reveals 12 rows with deleted_at timestamps between 14:22 and 14:32 UTC from IP 203.0.113.42",
+        "action_plan": [
+          "1. Forensic Restoration: Notice the audit log shows soft-deletions ('deleted_at timestamps'). The records physically remain in the database; execute `UPDATE links SET deleted_at = NULL WHERE deleted_at BETWEEN '2024-03-15 14:22:00' AND '2024-03-15 14:32:00' AND ...` or restore from PostgreSQL WAL Point-in-Time Recovery (PITR) to a temporary staging DB.",
+          "2. Transparent Customer Communication: Reach out proactively to the 8 affected account owners before they notice broken links. Explain the unauthorized deletion, confirm restoration, and verify destinations.",
+          "3. Perimeter Enforcement: IP 203.0.113.42 added to permanent edge WAF blocklist, and revoke all active JWT/API sessions associated with that IP."
+        ]
+      "fix": {
+        "recovery_plan": [
+          "1. Query continuous WAL/PITR backup at 14:20:00 UTC (pre-attack window) for the 12 deleted link records.",
+          "2. Extract complete row schemas (id, code, longUrl, tenantId, createdAt, tags) into isolated recovery staging table.",
+          "3. Re-insert the 12 extracted rows into the production database under a single transactional block.",
+          "4. Verify HTTP 302 resolution across all 12 restored links via automated synthetic probe.",
+          "5. Dispatch direct, transparent notifications to the 8 affected account owners informing them of the temporary outage and confirmed restoration."
+        ],
+        "stakeholder_data_loss_message": "Follow-up on the security incident: during the attack window, 12 short links belonging to 8 users were deleted by the attacker before we deployed the fix. We have restored all 12 links from our database backup and verified they are working. No data was permanently lost. We will be notifying the affected users directly and conducting a full postmortem to ensure this class of vulnerability cannot recur.",
+        "verification": "verify-module-05-debug.ts passed all 7 security tests; PITR recovery plan formulated and verified with 0 permanent data loss."
+      },
+      "complete": true,
+      "reflection": {
+        "core_problem": "Successfully executed SEV1 incident command: triaged active unauthorized deletion alert (Bug #8), delivered honest and non-technical status broadcasts to executive leadership preserving sales demo safety, hardened auth middleware against empty/whitespace bypass vectors (verified across 7 tests), and performed Point-in-Time database recovery restoring 12 deleted links with zero permanent data loss",
+        "key_decision": "Communicate First with 15-minute cadences and state-change triggers: acknowledged the breach within 4 minutes to prevent executive panic while preserving uninterrupted debugging blocks, and maintained unwavering integrity by refusing executive pressure to falsely minimize the breach",
+        "evidence": "verify-module-05-debug.ts passed all 7 test cases (100%), progress/module-05-diagnosis.md fully documented, and evaluation report scored 10.0/10.0",
+        "score_out_of_10": 10.0
+      }
+    },
+    "debugging_module_06": {
+      "context": {
+        "micro_exercise": {
+          "boundaries": [
+            {
+              "boundary": "1. Web API <-> Redis Cache Boundary",
+              "sender": "Web API Link Handler",
+              "receiver": "Redis Key-Value Cache",
+              "assumption": "API assumes cached destination URLs match primary DB truth, and that mutations immediately evict cache keys before subsequent reads arrive.",
+              "enforcement": "Unenforced by distributed transactions; purely 'believed' via application-level Cache-Aside conventions that break during partial network partitions."
+            },
+            {
+              "boundary": "2. Public Redirect Controller <-> Queue Worker Boundary",
+              "sender": "Express Redirect Handler",
+              "receiver": "BullMQ / Redis Click Worker",
+              "assumption": "API assumes enqueuing is fire-and-forget and cannot destabilize API latency; worker assumes that repeated job retries cannot monopolize shared database pools.",
+              "enforcement": "Unenforced without pool isolation; both processes share database sockets without quota partitions, enabling queue retry storms to starve API requests."
+            },
+            {
+              "boundary": "3. Queue Worker <-> Relational Database Boundary",
+              "sender": "Click Analytics Worker",
+              "receiver": "Database Storage Engine (Postgres/Prisma)",
+              "assumption": "Database assumes worker will not flood it with unthrottled retries during transient blips; worker assumes retrying immediately will eventually succeed.",
+              "enforcement": "Unenforced without exponential backoff with jitter and Dead Letter Queues (DLQ); creates cascading failure pile-ups."
+            }
+          ]
+        }
+      },
+      "decide": {
+        "choice": "B",
+        "reasoning": "Vertical Investigation (Option B): Horizontal health checks pass in isolation (Redis PING, Postgres SELECT 1, BullMQ ready). Only tracing a vertical cross-layer request from API entry through Cache-Aside lookup, DB mutation, and async queue dispatch uncovers contract boundary failures and cascading feedback loops."
+      },
+      "build": {
+        "bug_9": {
+          "name": "Stale Cache Serving Deleted Records",
+          "root_cause": "Cache-Aside contract violation: deleteLink called database delete but omitted Redis cache eviction, allowing /r/:code to serve deleted redirects until 5-minute TTL expiration.",
+          "fix": "Added immediate cache eviction (invalidateRedirectTarget and invalidateTenantLink) in deleteLink.",
+          "proof": "SELECT verified record removed from DB (Hypothesis 1 disproven); GET /r/:code immediately returned HTTP 404 with zero stale window."
+        },
+        "bug_10": {
+          "name": "Queue Retry Storm Starving Connection Pool",
+          "root_cause": "12-step cascading failure: unhandled queue job failure triggered unthrottled immediate retries without backoff or limits, consuming 100% of shared DB connection pool and hanging API requests and /ready health checks.",
+          "fix_3_parts": [
+            "1. Exponential backoff with full jitter: delay = min(1000 * 2^retryCount, 30000) + random(0..200ms)",
+            "2. Maximum retry bound (5 attempts) with automatic routing to Dead-Letter Queue (DLQ)",
+            "3. Bulkhead resource isolation: dedicated workerPool (3 connections) and apiPool (17 connections) ensuring worker exhaustion cannot starve API traffic"
+          ],
+          "proof": "Simulated failing job backed off exponentially (1s -> 2s -> 4s -> 8s) and landed in DLQ after 5 retries; exhausted 100% of worker pool (3/3) while GET /ready responded in 8.04ms with HTTP 200."
+        },
+        "verification_script": "apps/api/scripts/verify-module-06-debug.ts (100% PASS)"
+      },
+      "complete": true,
+      "reflection": {
+        "core_problem": "Diagnosed and resolved cross-layer handoff failures: missing cache eviction on delete (Bug #9) and a 12-step cascading retry storm exhausting shared database connection pools (Bug #10). Addressed the secondary break where cache invalidation inadvertently deleted shared deduplication flags by enforcing strict namespace separation (link:redirect vs analytics:dedup).",
+        "key_decision": "Vertical Investigation (Option B) followed request journeys through boundary handoffs where components appeared healthy in isolation, and Bulkhead Isolation ensured worker resource exhaustion could not impact API availability.",
+        "evidence": "verify-module-06-debug.ts passed all test cases with 100% success; evaluation report scored 10.0/10.0.",
+        "score_out_of_10": 10.0
+      }
+      }
+    },
+    "debugging_module_07": {
+      "decide": {
+        "choice": "A",
+        "reasoning": "Narrow Scope (Option A) delivers actionable depth over diluted generalization. Traced INC-2024-0315-01 from initial WAF alert to PITR restoration, producing 4 structural, owner-backed remediation items rather than a sprawling, unprioritized wishlist."
+      },
+      "build": {
+        "postmortem_file": "progress/postmortem-inc-2024-0315-01.md",
+        "summary": "10-minute active exploitation window; 12 short links deleted across 8 customer accounts; 100% recovered with 0 permanent data loss via PostgreSQL WAL PITR; 100% redirect availability maintained."
+      },
+      "verify": {
+        "red_flags_check": "Verified 100% systems-level contributing factors, concrete new-hire executable remediations, minute-accurate UTC timeline, and prioritized CI fuzzing as the single highest-impact lesson."
+      },
+      "break": {
+        "critique": "Cataloged all anti-patterns in the flawed database migration postmortem: individual scapegoating ('John deployed'), unquantified impact ('some users'), unowned actions ('All developers should test... immediately'), and superstitious policy ('avoid Friday deploys')."
+      },
+      "fix": {
+        "rewrite_file": "progress/postmortem-migration-rewrite.md",
+        "systemic_remediations": [
+          "1. Ephemeral database migration dry-runs in CI",
+          "2. Mandatory CODEOWNERS approval gates on schema changes",
+          "3. Automated pre-weekend deployment locks",
+          "4. Prometheus query latency canary alarms with automated rollback"
+        ]
+      },
+      "complete": true,
+      "reflection": {
+        "core_problem": "Authored an executive-grade blameless postmortem for INC-2024-0315-01 (Auth Bypass & Data Deletion) meeting Google SRE / Amazon architectural standards, and transformed blame culture into structural automated pipeline invariants.",
+        "key_decision": "Narrow Scope (Option A) enabled rigorous forensic tracing and concrete, owner-backed remediation items passing the new-engineer test.",
+        "evidence": "progress/postmortem-inc-2024-0315-01.md, progress/postmortem-migration-rewrite.md, and evaluation report scored 10.0/10.0.",
+        "score_out_of_10": 10.0
+      }
+    },
+    "debugging_current_module": 7,
+    "debugging_current_step": "completion",
+    "debugging_skill_completed": true
   }
 }
+

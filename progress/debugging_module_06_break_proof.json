@@ -1,0 +1,10 @@
+{
+  "summary": "Formulated hypothesis for secondary break: cache invalidation on delete exposed an async queue race condition where re-created short codes inherit pending async events or cause duplicate event recording across lifecycle transitions.",
+  "evidence": [
+    "Identified symptom: Deleted and re-created short links experience duplicate analytics events and doubled click counts processed by queue worker.",
+    "Formulated Hypothesis 1: Asynchronous click queue jobs reference mutable short codes rather than immutable link IDs; when a link is deleted and immediately re-created with the same code, in-flight queue jobs resolve the new link record instead of being discarded or isolated.",
+    "Formulated Hypothesis 2: Cache invalidation key collision or cache-based deduplication window was prematurely purged during deleteLink, allowing identical click events to bypass deduplication filters.",
+    "Formulated Hypothesis 3: On delete, queue messages pending for the previous link lifecycle are not purged from queue:clicks, causing backlogged events to attribute to the newly created link bearing the identical short code.",
+    "Ready to advance to Step 6 (FIX) to inspect the exact failure mechanism and apply the architectural decoupling fix."
+  ]
+}

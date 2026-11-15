@@ -1,0 +1,9 @@
+{
+  "summary": "Completed Module 01 Step 3 BUILD by establishing hypothesis-first diagnosis for Bug #1 (Database connection / environment variable mismatch) and Bug #2 (Pagination boundary off-by-one / sort stability).",
+  "evidence": [
+    "Created and maintained progress/module-01-diagnosis.md documenting symptoms, falsifiable hypotheses, commands, fixes, and proofs for both bugs.",
+    "Diagnosed and resolved Bug #1: Environment variable mismatch between configuration and Prisma runtime resolved by enforcing DATABASE_URL; verified GET /ready returns HTTP 200 with database: connected.",
+    "Diagnosed and resolved Bug #2: Off-by-one offset pagination and unstable sorting resolved by enforcing skip = (page - 1) * limit and deterministic orderBy: { createdAt: 'desc' }.",
+    "Verified across 25 seeded records that Page 1 (10 items), Page 2 (10 items), and Page 3 (5 items) have 0 overlapping boundary duplicates via verify-module-01-debug.ts."
+  ]
+}

@@ -51,19 +51,20 @@ export class CacheService {
 
   /**
    * Public redirect cache lookup (GET /r/:code).
-   * Returns cached destination URL or null on miss/outage.
+   * Uses isolated namespace: link:redirect:<short_code> (Module 06 Fix).
    */
   public async getRedirectTarget(code: string): Promise<string | null> {
     if (this.simulatedOutage) {
       return null;
     }
 
-    const key = `r:${code}`;
+    const key = `link:redirect:${code}`;
+    const legacyKey = `r:${code}`;
 
     // 1. Try real Redis cluster
     try {
       if (this.isConnected && this.redisClient) {
-        const val = await this.redisClient.get(key);
+        const val = await this.redisClient.get(key) || await this.redisClient.get(legacyKey);
         if (val) return val;
       }
     } catch (err: any) {
@@ -71,10 +72,11 @@ export class CacheService {
     }
 
     // 2. Local fallback if Redis container is not running on localhost
-    const entry = this.memoryStore.get(key);
+    const entry = this.memoryStore.get(key) || this.memoryStore.get(legacyKey);
     if (entry) {
       if (Date.now() > entry.expiresAt) {
         this.memoryStore.delete(key);
+        this.memoryStore.delete(legacyKey);
         return null;
       }
       return entry.value;
@@ -84,7 +86,7 @@ export class CacheService {
   }
 
   /**
-   * Sets redirect resolution cache with TTL + jitter to prevent thundering herd.
+   * Sets redirect resolution cache with TTL + jitter in isolated namespace: link:redirect:<short_code>.
    */
   public async setRedirectTarget(code: string, url: string, ttlSeconds = 3600): Promise<void> {
     if (this.simulatedOutage) {
@@ -94,37 +96,98 @@ export class CacheService {
     // Add 0-300s jitter to spread out expirations
     const jitter = Math.floor(Math.random() * 300);
     const effectiveTtl = ttlSeconds + jitter;
-    const key = `r:${code}`;
+    const key = `link:redirect:${code}`;
+    const legacyKey = `r:${code}`;
 
     try {
       if (this.isConnected && this.redisClient) {
         await this.redisClient.set(key, url, 'EX', effectiveTtl);
+        await this.redisClient.set(legacyKey, url, 'EX', effectiveTtl);
       }
     } catch (err: any) {
       logger.warn(`[CACHE] Redis SET error for "${key}": ${err.message}`);
     }
 
-    this.memoryStore.set(key, {
-      value: url,
-      expiresAt: Date.now() + effectiveTtl * 1000,
-    });
+    const expTime = Date.now() + effectiveTtl * 1000;
+    this.memoryStore.set(key, { value: url, expiresAt: expTime });
+    this.memoryStore.set(legacyKey, { value: url, expiresAt: expTime });
   }
 
   /**
    * Evicts public redirect cache immediately upon link update or deletion.
+   * Evicts ONLY the link:redirect:<short_code> namespace.
+   * Does NOT touch the analytics:dedup namespace.
    */
   public async invalidateRedirectTarget(code: string): Promise<void> {
-    const key = `r:${code}`;
+    const key = `link:redirect:${code}`;
+    const legacyKey = `r:${code}`;
 
     try {
       if (this.isConnected && this.redisClient) {
-        await this.redisClient.del(key);
+        await this.redisClient.del(key, legacyKey);
       }
     } catch (err: any) {
       logger.warn(`[CACHE] Redis DEL error for "${key}": ${err.message}`);
     }
 
     this.memoryStore.delete(key);
+    this.memoryStore.delete(legacyKey);
+  }
+
+  /**
+   * Deduplication check for analytics queue jobs (Module 06 Fix).
+   * Uses isolated namespace: analytics:dedup:<event_or_job_id>
+   */
+  public async isAnalyticsJobProcessed(jobOrEventId: string): Promise<boolean> {
+    if (this.simulatedOutage) {
+      return false;
+    }
+
+    const key = `analytics:dedup:${jobOrEventId}`;
+
+    try {
+      if (this.isConnected && this.redisClient) {
+        const val = await this.redisClient.get(key);
+        if (val) return true;
+      }
+    } catch (err: any) {
+      logger.warn(`[CACHE] Redis GET error for "${key}": ${err.message}`);
+    }
+
+    const entry = this.memoryStore.get(key);
+    if (entry) {
+      if (Date.now() > entry.expiresAt) {
+        this.memoryStore.delete(key);
+        return false;
+      }
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Marks analytics job as processed in isolated namespace: analytics:dedup:<event_or_job_id>.
+   */
+  public async markAnalyticsJobProcessed(jobOrEventId: string, ttlSeconds = 86400): Promise<void> {
+    if (this.simulatedOutage) {
+      return;
+    }
+
+    const key = `analytics:dedup:${jobOrEventId}`;
+
+    try {
+      if (this.isConnected && this.redisClient) {
+        await this.redisClient.set(key, '1', 'EX', ttlSeconds);
+      }
+    } catch (err: any) {
+      logger.warn(`[CACHE] Redis SET error for "${key}": ${err.message}`);
+    }
+
+    this.memoryStore.set(key, {
+      value: '1',
+      expiresAt: Date.now() + ttlSeconds * 1000,
+    });
   }
 
   /**

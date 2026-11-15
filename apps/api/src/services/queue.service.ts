@@ -70,13 +70,20 @@ export class QueueService {
   }
 
   /**
-   * Enqueues a click event job onto the queue.
+   * Enqueues a click event job onto the queue with optional backoff delay.
    * If the queue is down, catches error and returns false without throwing (Graceful Degradation).
    */
-  public async enqueueClick(job: ClickJobPayload): Promise<boolean> {
+  public async enqueueClick(job: ClickJobPayload, delayMs: number = 0): Promise<boolean> {
     if (this.simulatedOutage) {
       logger.warn(`[QUEUE] Outage active: dropped click job ${job.eventId} gracefully.`);
       return false;
+    }
+
+    if (delayMs > 0) {
+      setTimeout(async () => {
+        await this.enqueueClick(job, 0);
+      }, delayMs);
+      return true;
     }
 
     try {

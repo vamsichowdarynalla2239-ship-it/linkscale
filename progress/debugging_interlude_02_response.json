@@ -1,0 +1,14 @@
+{
+  "nonce": "0D14ykckQHrudyjLOI7io",
+  "events": [
+    {
+      "module": 2,
+      "step": "interlude",
+      "event_type": "interlude_response",
+      "data": {
+        "after_module": 2,
+        "response": "I would add `build_version` (git commit SHA + config hash) to every structured log line. In incidents like Knight Capital or rolling deploy failures, code and configuration bifurcate across nodes. Having the exact build and config hash in every log entry immediately exposes version divergence under pressure—pinpointing whether errors cluster on a specific release within seconds and enabling an immediate, confident rollback."
+      }
+    }
+  ]
+}

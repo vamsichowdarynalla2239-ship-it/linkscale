@@ -1,36 +1,77 @@
 import { prisma } from '../db';
 import { logger } from '../utils/logger';
 import { queueService, ClickJobPayload } from '../services/queue.service';
+import { cacheService } from '../services/cache.service';
+import { ConnectionPool, workerPool } from '../utils/pool';
 
 export interface ProcessResult {
   processed: boolean;
   status: 'empty' | 'success' | 'deduplicated' | 'retried' | 'dlq';
   eventId?: string;
   error?: string;
+  delayMs?: number;
 }
 
 export class ClickWorker {
   private isRunning = false;
-  private readonly MAX_RETRIES = 3;
+  private readonly MAX_RETRIES = 5;
+  private pool: ConnectionPool;
+
+  constructor(pool: ConnectionPool = workerPool) {
+    this.pool = pool;
+  }
+
+  /**
+   * Calculates exponential backoff with full jitter (Bug #10 Fix Part 1).
+   * Prevents retry storms from hammering downstream dependencies.
+   */
+  public calculateBackoff(retryCount: number): number {
+    const baseDelayMs = 1000; // 1s
+    const maxDelayMs = 30000; // 30s
+    const exponential = Math.min(baseDelayMs * Math.pow(2, retryCount), maxDelayMs);
+    const jitter = Math.floor(Math.random() * 200);
+    return exponential + jitter;
+  }
+
+  /**
+   * Sets dedicated connection pool (Bulkhead pattern, Bug #10 Fix Part 3).
+   */
+  public setPool(pool: ConnectionPool): void {
+    this.pool = pool;
+  }
 
   /**
    * Processes a single click job from the queue.
-   * Guarantees exact-once semantics via database unique constraint on eventId.
+   * Guarantees exact-once semantics via database unique constraint on eventId
+   * and isolated resource execution via dedicated worker connection pool.
    */
   async processJob(job: ClickJobPayload): Promise<ProcessResult> {
     try {
-      // 1. Database-level idempotent insert
-      await prisma.clickEvent.create({
-        data: {
-          eventId: job.eventId,
-          linkId: job.linkId,
-          tenantId: job.tenantId,
-          ipHash: job.ipHash,
-          userAgent: job.userAgent || null,
-          referrer: job.referrer || null,
-          clickedAt: new Date(job.timestamp),
-        },
+      // 0. Namespace-Isolated Deduplication Check (Module 06 Step 6 Fix)
+      // Dedicated namespace (analytics:dedup:<id>) prevents key collision with redirect cache
+      const alreadyProcessed = await cacheService.isAnalyticsJobProcessed(job.eventId);
+      if (alreadyProcessed) {
+        logger.info(`[WORKER:DEDUP] Job ${job.eventId} already processed in dedup cache. Skipping.`);
+        return { processed: true, status: 'deduplicated', eventId: job.eventId };
+      }
+
+      // 1. Bulkhead Isolated Database Operation (Bug #10 Fix Part 3)
+      await this.pool.executeSafe(async () => {
+        return await prisma.clickEvent.create({
+          data: {
+            eventId: job.eventId,
+            linkId: job.linkId,
+            tenantId: job.tenantId,
+            ipHash: job.ipHash,
+            userAgent: job.userAgent || null,
+            referrer: job.referrer || null,
+            clickedAt: new Date(job.timestamp),
+          },
+        });
       });
+
+      // Mark as processed in dedicated analytics:dedup namespace
+      await cacheService.markAnalyticsJobProcessed(job.eventId);
 
       logger.debug(`[WORKER] Successfully processed click event ${job.eventId} for link ${job.linkId}`);
       return { processed: true, status: 'success', eventId: job.eventId };
@@ -41,20 +82,21 @@ export class ClickWorker {
         return { processed: true, status: 'deduplicated', eventId: job.eventId };
       }
 
-      // 3. Retry Handling with Exponential Backoff
+      // 3. Retry Handling with Exponential Backoff (Bug #10 Fix Part 1)
       const currentRetries = job.retryCount || 0;
       if (currentRetries < this.MAX_RETRIES) {
         job.retryCount = currentRetries + 1;
-        logger.warn(`[WORKER:RETRY] Processing failed for ${job.eventId} (${err.message}). Attempt ${job.retryCount}/${this.MAX_RETRIES}`);
+        const delayMs = this.calculateBackoff(currentRetries);
+        logger.warn(`[WORKER:RETRY] Processing failed for ${job.eventId} (${err.message}). Attempt ${job.retryCount}/${this.MAX_RETRIES}. Backing off for ${delayMs}ms`);
         
-        // Re-enqueue for retry
-        await queueService.enqueueClick(job);
-        return { processed: false, status: 'retried', eventId: job.eventId, error: err.message };
+        // Re-enqueue with exponential backoff delay
+        await queueService.enqueueClick(job, delayMs);
+        return { processed: false, status: 'retried', eventId: job.eventId, error: err.message, delayMs };
       }
 
-      // 4. Exhausted Retries -> Dead-Letter Queue (DLQ)
-      logger.error(`[WORKER:DLQ] Retries exhausted for ${job.eventId}. Sending to Dead-Letter Queue.`);
-      await queueService.sendToDlq(job, err.message || 'Unknown processing error');
+      // 4. Exhausted Retries -> Dead-Letter Queue (DLQ) (Bug #10 Fix Part 2)
+      logger.error(`[WORKER:DLQ] Retries exhausted (${this.MAX_RETRIES}/${this.MAX_RETRIES}) for ${job.eventId}. Sending to Dead-Letter Queue.`);
+      await queueService.sendToDlq(job, err.message || 'Maximum retries exhausted');
       return { processed: false, status: 'dlq', eventId: job.eventId, error: err.message };
     }
   }
