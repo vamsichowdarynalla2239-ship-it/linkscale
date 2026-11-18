@@ -1,5 +1,5 @@
 # ---- Stage 1: Builder ----
-FROM node:20-slim AS builder
+FROM node:22-slim AS builder
 
 WORKDIR /app
 
@@ -21,9 +21,10 @@ COPY . .
 # Generate Prisma Client for PostgreSQL production runtime & compile TypeScript
 RUN cd apps/api && npx prisma generate --schema=prisma/schema.postgres.prisma
 RUN npm run build
+RUN mkdir -p /app/apps/api/node_modules
 
 # ---- Stage 2: Runner ----
-FROM node:20-slim AS runner
+FROM node:22-slim AS runner
 
 WORKDIR /app
 
@@ -40,6 +41,7 @@ RUN groupadd -r appgroup && useradd -r -g appgroup -s /bin/false appuser
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
+COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
 
@@ -55,4 +57,4 @@ USER appuser
 
 # Start application (sync PostgreSQL schema on boot, then start API server)
 WORKDIR /app/apps/api
-CMD ["sh", "-c", "/app/node_modules/.bin/prisma db push --schema=prisma/schema.postgres.prisma --skip-generate && node dist/main.js"]
+CMD ["sh", "-c", "(./node_modules/.bin/prisma db push --schema=prisma/schema.postgres.prisma --skip-generate || /app/node_modules/.bin/prisma db push --schema=prisma/schema.postgres.prisma --skip-generate) && node dist/main.js"]
