@@ -11,10 +11,11 @@ export class CacheService {
     const url = redisUrl || process.env.REDIS_URL || 'redis://localhost:6379';
     try {
       this.redisClient = new Redis(url, {
+        family: 0,
         lazyConnect: true,
-        connectTimeout: 500,
+        connectTimeout: 3000,
         maxRetriesPerRequest: 1,
-        retryStrategy: () => null, // Never hang on connection failure
+        retryStrategy: (times) => (times <= 3 ? Math.min(times * 500, 2000) : null),
         reconnectOnError: () => false,
       });
 

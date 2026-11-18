@@ -1,0 +1,73 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Tenant {
+  id        String       @id @default(cuid())
+  name      String
+  createdAt DateTime     @default(now())
+  links     Link[]
+  clicks    ClickEvent[]
+  apiKeys   ApiKey[]
+}
+
+model ApiKey {
+  id        String    @id @default(cuid())
+  keyHash   String    @unique
+  prefix    String
+  name      String?
+  tenantId  String
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  @@index([tenantId])
+}
+
+model Link {
+  id        String            @id @default(cuid())
+  code      String            @unique
+  longUrl   String
+  tenantId  String
+  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt DateTime          @default(now())
+  expiresAt DateTime?
+  tags      String?
+  clicks    ClickEvent[]
+  buckets   AnalyticsBucket[]
+
+  @@index([tenantId, createdAt(sort: Desc)])
+}
+
+model AnalyticsBucket {
+  id              String   @id @default(cuid())
+  linkId          String
+  timestampBucket String
+  count           Int      @default(1)
+  lastAccessedAt  DateTime @default(now())
+  link            Link     @relation(fields: [linkId], references: [id], onDelete: Cascade)
+
+  @@unique([linkId, timestampBucket], name: "analytics_link_id_bucket_unique")
+  @@index([linkId])
+}
+
+model ClickEvent {
+  id        String   @id @default(cuid())
+  eventId   String?  @unique
+  linkId    String
+  link      Link     @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  clickedAt DateTime @default(now())
+  userAgent String?
+  referrer  String?
+  ipHash    String?
+
+  @@index([tenantId, clickedAt(sort: Desc)])
+  @@index([linkId, clickedAt(sort: Desc)])
+}

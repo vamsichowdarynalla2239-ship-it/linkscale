@@ -32,6 +32,7 @@ export class QueueService {
     const url = redisUrl || process.env.REDIS_URL || 'redis://localhost:6379';
     try {
       this.redisClient = new Redis(url, {
+        family: 0,
         lazyConnect: true,
         connectTimeout: 500,
         maxRetriesPerRequest: 1,
