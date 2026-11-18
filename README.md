@@ -1,13 +1,16 @@
 # LinkScale: Production-Grade Multi-Tenant URL Engine, Notification Delivery & SRE Platform
 
+[![Live Production Demo](https://img.shields.io/badge/Live_Demo-Railway_Production-0B0D0E?style=for-the-badge&logo=railway)](https://linkscale-api-production.up.railway.app/ready)
 [![CI Pipeline](https://github.com/vamsichowdarynalla2239-ship-it/linkscale/actions/workflows/ci.yml/badge.svg)](https://github.com/vamsichowdarynalla2239-ship-it/linkscale/actions)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-20.x-green?style=for-the-badge&logo=nodedotjs)](https://nodejs.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?style=for-the-badge&logo=postgresql)](https://www.postgresql.org/)
-[![Redis](https://img.shields.io/badge/Redis-7.x-DC382D?style=for-the-badge&logo=redis)](https://redis.io/)
-[![Prometheus](https://img.shields.io/badge/Prometheus-RED_Metrics-E6522C?style=for-the-badge&logo=prometheus)](https://prometheus.io/)
+[![Node.js](https://img.shields.io/badge/Node.js-22.x-green?style=for-the-badge&logo=nodedotjs)](https://nodejs.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791?style=for-the-badge&logo=postgresql)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/Redis-8.2-DC382D?style=for-the-badge&logo=redis)](https://redis.io/)
+[![Prometheus](https://img.shields.io/badge/Prometheus-RED_Metrics-E6522C?style=for-the-badge&logo=prometheus)](https://linkscale-api-production.up.railway.app/metrics)
 [![Docker](https://img.shields.io/badge/Docker-Multi--Stage-2496ED?style=for-the-badge&logo=docker)](https://www.docker.com/)
 [![Upsk Verified](https://img.shields.io/badge/Upsk_Curriculum-25%2F25_Modules_10.0%2F10.0-brightgreen?style=for-the-badge)](https://www.upsk.to/vamsichowdarynalla22)
+
+**Live Production Deployment:** [https://linkscale-api-production.up.railway.app](https://linkscale-api-production.up.railway.app/ready) · [Liveness (`/live`)](https://linkscale-api-production.up.railway.app/live) · [Readiness (`/ready`)](https://linkscale-api-production.up.railway.app/ready) · [Prometheus Metrics (`/metrics`)](https://linkscale-api-production.up.railway.app/metrics)
 
 A high-throughput, multi-tenant link shortening, real-time analytics, and resilient notification delivery platform engineered from first principles for enterprise B2B scale. Hardened end-to-end across **System Design**, **Distributed Debugging & Incident Response**, and **Production Readiness**—delivering sub-10ms cached redirects, bulkhead pool isolation, Prometheus RED observability, `opossum` circuit breakers, live-tested 3 AM operational runbooks, and verified zero-downtime rolling deployments with sub-2-minute rollbacks.
 
@@ -122,6 +125,7 @@ All architecture, debugging, observability, resilience, runbook, and zero-downti
 
 | Verification Harness / Audit Log | Scope & Proven Invariants | Result |
 |---|---|---|
+| [`progress/evidence/live-railway-verification.txt`](progress/evidence/live-railway-verification.txt) & [`scripts/verify-live-railway.ts`](scripts/verify-live-railway.ts) | **Live Railway Production (PostgreSQL + Redis):** `/live` `200`, `/ready` (`db=connected`, `cache=connected`, `6.18ms`), `/metrics`, `POST /links`, `X-Cache: MISS → HIT`, Anti-IDOR `404`, `POST /notifications/send`, immediate delete eviction | **PASS (8/8 LIVE)** |
 | [`progress/evidence/module-09/testing-verification.txt`](progress/evidence/module-09/testing-verification.txt) | 7/7 Integration, Anti-IDOR 404 scoping, 5 URL smuggling rejections, P2002 exact-once deduplication, 30-day retention pruning | **PASS (7/7)** |
 | [`progress/evidence/module-10/deploy-verification.txt`](progress/evidence/module-10/deploy-verification.txt) | 7/7 Cloud readiness (`/health` `2.60ms`, `/ready` `4.46ms`), `0.0.0.0` binding, graceful draining, Dockerfile & CI gates | **PASS (7/7)** |
 | [`apps/api/scripts/verify-module-06-debug.ts`](apps/api/scripts/verify-module-06-debug.ts) | Cache eviction on delete, exponential backoff (1s–8s), DLQ routing after 5 failures, `/ready` in `8.04ms` during 100% worker exhaustion | **PASS** |
