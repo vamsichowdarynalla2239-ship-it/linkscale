@@ -1,14 +1,15 @@
-# LinkScale: Production-Grade Multi-Tenant URL Engine & Distributed Analytics
+# LinkScale: Production-Grade Multi-Tenant URL Engine, Notification Delivery & SRE Platform
 
-[![Live Demo — Coming Soon](https://img.shields.io/badge/Live_Demo-Coming_Soon-orange?style=for-the-badge&logo=railway)](#-live-cloud-deployment-runbook)
 [![CI Pipeline](https://github.com/vamsichowdarynalla2239-ship-it/linkscale/actions/workflows/ci.yml/badge.svg)](https://github.com/vamsichowdarynalla2239-ship-it/linkscale/actions)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-20.x-green?style=for-the-badge&logo=nodedotjs)](https://nodejs.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?style=for-the-badge&logo=postgresql)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Redis-7.x-DC382D?style=for-the-badge&logo=redis)](https://redis.io/)
+[![Prometheus](https://img.shields.io/badge/Prometheus-RED_Metrics-E6522C?style=for-the-badge&logo=prometheus)](https://prometheus.io/)
 [![Docker](https://img.shields.io/badge/Docker-Multi--Stage-2496ED?style=for-the-badge&logo=docker)](https://www.docker.com/)
+[![Upsk Verified](https://img.shields.io/badge/Upsk_Curriculum-25%2F25_Modules_10.0%2F10.0-brightgreen?style=for-the-badge)](https://www.upsk.to/vamsichowdarynalla22)
 
-A high-throughput, multi-tenant link shortening, redirection, and real-time analytics platform engineered for enterprise B2B scale. Built from first principles to prioritize sub-millisecond public redirection SLAs, strict multi-tenant data isolation, asynchronous event processing, and zero-downtime rolling deployments.
+A high-throughput, multi-tenant link shortening, real-time analytics, and resilient notification delivery platform engineered from first principles for enterprise B2B scale. Hardened end-to-end across **System Design**, **Distributed Debugging & Incident Response**, and **Production Readiness**—delivering sub-10ms cached redirects, bulkhead pool isolation, Prometheus RED observability, `opossum` circuit breakers, live-tested 3 AM operational runbooks, and verified zero-downtime rolling deployments with sub-2-minute rollbacks.
 
 ---
 
@@ -18,44 +19,49 @@ A high-throughput, multi-tenant link shortening, redirection, and real-time anal
 flowchart TD
     subgraph Ingress ["Edge & Ingress Layer"]
         Client(["Public Clients & API Consumers"])
-        LB["Cloud Load Balancer / Reverse Proxy\n(ALB / Cloudflare / Railway Edge)\nIdle Timeout: 60s"]
+        LB["Cloud Load Balancer / Reverse Proxy\n(Fly Edge / ALB / Cloudflare)\nRolling Deploy (max_unavailable: 0)"]
     end
 
-    subgraph APIFleet ["Web API Cluster (apps/api)"]
-        API1["API Instance 1\nkeepAlive: 65s / headers: 66s"]
-        API2["API Instance 2\nkeepAlive: 65s / headers: 66s"]
-        HealthProbe["Probes:\nGET /health (Liveness: Process Vitality)\nGET /ready (Readiness: SELECT 1)"]
+    subgraph APIFleet ["Web API Cluster (apps/api — Non-Root node:20-slim)"]
+        API1["API Instance 1\nkeepAlive: 65s / headers: 66s\nBulkhead apiPool: 17 conns"]
+        API2["API Instance 2\nkeepAlive: 65s / headers: 66s\nBulkhead apiPool: 17 conns"]
+        Probes["Probes & Telemetry:\nGET /live & /health (Liveness)\nGET /ready (2s DB Probe + Config Fingerprint)\nGET /metrics (Prometheus RED + Gauges)"]
+        Breaker["NotificationService\nAbortController Timeout (1s)\nopossum CircuitBreaker + FIFO Fallback Queue"]
     end
 
     subgraph DataCache ["Distributed Caching & Broker Layer"]
-        RedisCache[("Redis Cache Cluster\nKey: r:{code}\nCache-Aside Eviction on Mutation")]
-        RedisQueue[("Redis Queue Broker\nList: queue:clicks\nBuffered Analytics Ingestion")]
+        RedisCache[("Redis Cache Cluster\nNamespaces: link:redirect:{code}\nanalytics:dedup:{eventId}")]
+        RedisQueue[("Redis Queue Broker\nqueue:clicks + queue:clicks:dlq\nExponential Backoff + Full Jitter")]
     end
 
     subgraph WorkerFleet ["Background Worker Fleet (apps/worker)"]
-        Worker1["ClickWorker Instance 1\nHorizontally Scaled by Queue Depth"]
-        Worker2["ClickWorker Instance 2\nHorizontally Scaled by Queue Depth"]
+        Worker1["ClickWorker Instance 1\nBulkhead workerPool: 3 conns"]
+        Worker2["ClickWorker Instance 2\nMax 5 Retries -> DLQ"]
         Deduplicator["Idempotent Processor\nP2002 Unique (eventId) Deduplication"]
     end
 
-    subgraph Persistence ["Relational Storage Engine"]
+    subgraph Persistence ["Relational Storage & Observability"]
         Postgres[("PostgreSQL 16 Primary\n- Link (tenantId, code B-Tree Index)\n- ClickEvent (tenantId, clickedAt Index)\n- ApiKey (SHA-256 Hashes)")]
+        Prom["Prometheus + Alertmanager\ninfra/alerts.yml (4 Golden Rules)"]
     end
 
     Client -->|HTTPS Ingress| LB
     LB -->|Round Robin (0.0.0.0:PORT)| API1
     LB -->|Round Robin (0.0.0.0:PORT)| API2
-    LB -.->|Health & Readiness Probes| HealthProbe
+    LB -.->|Liveness & Readiness Gating| Probes
+    Prom -.->|Scrape /metrics| Probes
 
-    API1 -->|1. Fast Cache Read (O(1))| RedisCache
+    API1 -->|1. O(1) Cache Read| RedisCache
     API1 -->|Cache Miss Fallback| Postgres
     API1 -->|2. Non-blocking Enqueue (<1ms)| RedisQueue
-    API2 -->|1. Fast Cache Read (O(1))| RedisCache
+    API1 --> Breaker
+    API2 -->|1. O(1) Cache Read| RedisCache
     API2 -->|Cache Miss Fallback| Postgres
     API2 -->|2. Non-blocking Enqueue (<1ms)| RedisQueue
+    API2 --> Breaker
 
-    RedisQueue -->|RPOPLPUSH / BRPOP| Worker1
-    RedisQueue -->|RPOPLPUSH / BRPOP| Worker2
+    RedisQueue -->|BRPOP / Backoff| Worker1
+    RedisQueue -->|BRPOP / Backoff| Worker2
     Worker1 --> Deduplicator
     Worker2 --> Deduplicator
     Deduplicator -->|Batch Insert / Upsert| Postgres
@@ -63,222 +69,134 @@ flowchart TD
 
 ---
 
+## 🚀 Enterprise Production Engineering & Resilience
+
+*(Hardened in Production Readiness & Debugging tracks — commit `ab7e59b`)*
+
+### 1. Observability & Alerting
+* **Prometheus RED Metrics (`GET /metrics`):** Powered by `prom-client` in [`apps/api/src/utils/metrics.ts`](apps/api/src/utils/metrics.ts) and [`apps/api/src/middleware/metrics.middleware.ts`](apps/api/src/middleware/metrics.middleware.ts), exposing `http_requests_total`, `http_request_duration_seconds` histograms, `http_requests_in_flight`, `notification_queue_depth{channel}`, `circuit_breaker_state`, and Node.js heap/event-loop metrics. Dynamic path segments (`/r/:code`, `/links/:id`) are normalized to prevent Prometheus time-series cardinality explosions.
+* **Structured JSON Logging & Secret Scrubbing:** [`apps/api/src/utils/logger.ts`](apps/api/src/utils/logger.ts) emits UTC ISO-8601 JSON logs stamped with `service_name` and correlated `request_id` (`X-Request-Id`), neutralizing CRLF injection (CWE-117) and automatically redacting sensitive headers, keys, and inline URI credentials (`://user:pass@` &rarr; `://[REDACTED]@`).
+* **Actionable PromQL Alerting:** [`infra/alerts.yml`](infra/alerts.yml) defines 4 fatigue-resistant rules with sustained `for:` windows, severity tiers, and direct runbook links: `HighErrorRate` (`5xx > 5%` for `2m`), `HighLatency` (`p95 > 2s` for `3m`), `ServiceDown` (`up == 0` for `1m`), and `HighHeapMemoryUsage` (`heap > 85%` for `5m`).
+
+### 2. Fault Tolerance & Graceful Degradation
+* **Explicit Timeouts, Jittered Retries & Circuit Breakers:** [`apps/api/src/utils/resilience.ts`](apps/api/src/utils/resilience.ts) wraps outbound calls with `AbortController` timeouts (`withTimeout`), transient-only exponential backoff with mandatory jitter floors (`retryWithBackoff`, clamped `maxRetries <= 10`, `jitterMs >= 5ms`, zero retries on permanent `4xx` errors), and `opossum` circuit breakers (`createResilientBreaker`) wired to Prometheus gauges.
+* **Bounded Async Fallback Queues:** [`apps/api/src/services/notification.service.ts`](apps/api/src/services/notification.service.ts) (`POST /notifications/send`) transitions cleanly across `Closed → Open → Half-Open → Closed`. When an external email/SMS/push provider stalls or fails, open-circuit requests return `HTTP 202 Accepted` (`status: queued_fallback`) in `<1ms` without touching the dead provider, backed by a FIFO-capped fallback queue (`MAX_FALLBACK_QUEUE_SIZE = 1000`) to prevent unbounded memory leaks.
+* **Bulkhead Pool & Namespace Isolation:** Separate database pools (`apiPool = 17`, `workerPool = 3` in [`apps/api/src/utils/pool.ts`](apps/api/src/utils/pool.ts)) ensure 100% worker exhaustion never starves ingress traffic (`/ready` verified at `8.04ms` under full worker saturation), while decoupled Redis namespaces (`link:redirect:` vs. `analytics:dedup:`) prevent cross-domain cache collisions.
+
+### 3. Failure Mode Analysis & 3 AM Operational Runbooks
+* **13-Mode Failure Mode & Effects Analysis (FMEA):** [`docs/failure-mode-analysis.md`](docs/failure-mode-analysis.md) audits 6 external dependencies (including DNS and runtime/clock skew), classifies transient vs. permanent faults, maps cascading failure propagation, ranks top risks by probability &times; impact, and records live simulation gaps.
+* **Structured Infrastructure Fault Classification:** [`apps/api/src/middleware/error.middleware.ts`](apps/api/src/middleware/error.middleware.ts) classifies `TimeoutError`/`ETIMEDOUT` &rarr; `HTTP 504`, `ENOTFOUND`/`EAI_AGAIN` DNS failures &rarr; `HTTP 503` (`Retry-After: 5`), and storage read-only/connection failures &rarr; `HTTP 503`, logging explicit `failure_mode` telemetry without leaking stack traces.
+* **Live-Tested 3 AM Runbooks:** Zero-placeholder operations manual ([`docs/service-overview.md`](docs/service-overview.md)) and 3 alert-linked linear-checklist runbooks—[`high-error-rate.md`](docs/runbooks/high-error-rate.md), [`high-latency.md`](docs/runbooks/high-latency.md), and [`service-down.md`](docs/runbooks/service-down.md)—complete with Step 0 live topology drift checks, dual healthy/unhealthy expected outputs, pre-OOM heap diagnostics, and timed escalation paths.
+
+### 4. Zero-Downtime Deployment, Config Governance & Automated Rollback
+* **Hardened Probes & Drift Detection:** [`apps/api/src/app.ts`](apps/api/src/app.ts) decouples lightweight, dependency-free `GET /live` from 2-second timeout-bounded `GET /ready` (reporting `database`, `cache`, `notification_circuit_breaker`, `version` git SHA, `uptime_seconds`, and `config_fingerprint`). [`apps/api/src/config/env.ts`](apps/api/src/config/env.ts) enforces Twelve-Factor fail-fast Zod startup validation and computes a non-secret SHA-256 `CONFIG_FINGERPRINT` to detect out-of-band ClickOps configuration drift.
+* **Multi-Stage Non-Root Container & Rolling Rollout:** Root [`Dockerfile`](Dockerfile) and [`.dockerignore`](.dockerignore) build a minimal `node:20-slim` runtime executing as unprivileged `USER appuser` with `<200MB` CI size enforcement. [`fly.toml`](fly.toml) (`strategy = "rolling"`, `max_unavailable = 0`) and [`infra/docker-compose.yml`](infra/docker-compose.yml) (`mem_limit: 512m`) govern rollout health gating.
+* **Automated CI/CD Deploy & Failure Rollback:** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) executes `lint → build → test → Docker build (git SHA) → <200MB guardrail → ghcr.io push → rolling deploy → 30-attempt /ready poll → functional POST /notifications/send business smoke check → automated rollback on failure`.
+
+---
+
 ## ⚖️ Key Architectural Decisions & Trade-Offs
 
-*(Extracted directly from system engineering logs in `progress/state.json`)*
+*(Extracted from engineering decision logs in [`progress/state.json`](progress/state.json))*
 
-### 1. Database-Native Search (`db_native`) vs. Secondary Search Engine
-* **Choice**: Option A (`db_native`) — Structured relational indexing with root-level `tenantId` query predicates and bounded pagination (`page_size <= 100`).
-* **Why**: Avoids the operational overhead, dual-write divergence, and eventual consistency lag (CDC sync delay) of maintaining a secondary Elasticsearch or Meilisearch cluster. Guarantees immediate ACID read-your-own-writes consistency while enforcing airtight multi-tenant query boundaries at the storage engine.
-
-### 2. Cache-Aside (`cache_aside`) vs. Write-Through Caching
-* **Choice**: Option A (`cache_aside`) with active `DEL` invalidation on link mutation.
-* **Why**: Eliminates cache pollution from batch programmatic link generation (only frequently accessed links occupy Redis memory). Avoids out-of-order write race conditions by evicting on mutation rather than updating, and decouples write latency and availability from Redis uptime (failing gracefully to PostgreSQL if Redis is down).
-
-### 3. Asynchronous Analytics Queue (`async_queue`) vs. Synchronous DB Logging
-* **Choice**: Option B (`async_queue`) — Ingress payload buffering via Redis queue with dedicated background worker processing.
-* **Why**: Protects the sub-millisecond public redirect SLA by offloading heavy database writes, user-agent enrichment, and index maintenance. Absorbs bursty traffic spikes in Redis, isolates memory/CPU load, and protects PostgreSQL connection pools from sudden saturation.
-
-### 4. Integration-Heavy Testing (`integration_heavy`) vs. Mock-Heavy Unit Tests
-* **Choice**: Option B (`integration_heavy`) paired with pre-flight database guardrails (`NODE_ENV === 'test'`) and per-run UUID namespace isolation (`crypto.randomUUID()`).
-* **Why**: Unit tests with mocked database and cache clients create a false confidence gap—they cannot detect Prisma unique constraint violations (`P2002`), Express route shadowing (`/links/search` vs `/:id`), SQL scoping leaks, or Redis cache desynchronization. Integration tests against real engines validate the exact contracts that cause production outages.
-
-### 5. Multi-Service Deployment (`multi_service`) vs. Monolithic Container
-* **Choice**: Option B (`multi_service`) — Decoupled Web API and Background Worker containers built from a single multi-stage Dockerfile.
-* **Why**: Eliminates event-loop contention between the public redirect path and heavy analytics I/O. Allows asymmetric horizontal auto-scaling (API scales on request concurrency/CPU; Worker scales on Redis queue depth) and reduces deployment blast radius.
+1. **Database-Native Search (`db_native`) vs. Secondary Search Engine:** Relational indexing with root-level `tenantId` query predicates and bounded pagination (`page_size <= 100`) guarantees ACID read-your-own-writes consistency and airtight multi-tenant scoping without Elasticsearch dual-write drift.
+2. **Cache-Aside (`cache_aside`) vs. Write-Through:** Evicting on mutation (`DEL`) prevents cache pollution from bulk link generation, eliminates out-of-order write races, and degrades cleanly to PostgreSQL if Redis goes down.
+3. **Asynchronous Analytics Queue (`async_queue`) vs. Synchronous DB Logging:** Buffers click telemetry in Redis (`<1ms` ingress) and drains via dedicated idempotent workers (`P2002` deduplication, max 5 jittered retries &rarr; DLQ), shielding public redirect latency from write bursts.
+4. **Integration-Heavy Testing (`integration_heavy`) vs. Mock-Heavy Unit Tests:** Runs against real storage engines with `NODE_ENV=test` guardrails and UUID tenant namespaces to catch real constraint violations, route shadowing, and cache desynchronization.
+5. **Multi-Service Deployment (`multi_service`) + Rolling Auto-Rollback:** Decouples Web API and Background Worker scaling while pairing expand-and-contract migrations with rolling health-gated deploys and automated rollback.
 
 ---
 
-## 🛡️ Security & Production Reliability Invariants
+## 🛡️ Security & Multi-Tenant Invariants
 
-### Multi-Tenancy & Zero-Trust Security Perimeter
-1. **Root-Level Query Tree Scoping**: Every database lookup, mutation, and search query enforces `tenantId` at the root of the query plan (`where: { id, tenantId }`), preventing cross-tenant data leaks.
-2. **Anti-IDOR 404 Masking**: Attempting to access, modify, or delete a link belonging to another tenant returns `HTTP 404 Not Found` rather than `HTTP 403 Forbidden`, completely preventing resource existence enumeration.
-3. **Zod Input Validation & Smuggling Rejection**: The API rejects malicious inputs with `HTTP 400 Bad Request`, explicitly blocking 5 core attack vectors:
-   * Backslash URI smuggling (`https://example.com\/evil.com`)
-   * JavaScript protocol XSS execution (`javascript:alert(1)`)
-   * CRLF header injection (`https://example.com\r\nSet-Cookie:...`)
-   * Userinfo credential extraction (`https://admin:pass@example.com`)
-   * Unsupported protocol schemes (`ftp://...`, `file://...`)
-4. **GDPR/CCPA Salted IP Hashing**: Raw client IP addresses are never logged or stored. Ingress hashes the IP using a salted SHA-256 digest (`IP_SALT`) before queuing, ensuring privacy compliance while retaining unique visitor analytics.
-
-### Cloud Orchestration & SRE Invariants
-5. **Dynamic Port & Container Interface Binding**: The Node.js server explicitly binds to `0.0.0.0` and reads `Number(process.env.PORT) || 3000`, ensuring incoming traffic from cloud edge proxies on container interface `eth0` is accepted instead of rejected with `Connection refused`.
-6. **Reverse-Proxy Keep-Alive Alignment**: Node.js `keepAliveTimeout` is set to `65000ms` and `headersTimeout` to `66000ms`—strictly exceeding the standard 60-second idle timeout of AWS ALB, Cloudflare, and Railway edge proxies. This prevents intermittent `502 Bad Gateway` connection reuse race conditions.
-7. **Decoupled Liveness vs. Readiness Probes**:
-   * **Liveness (`GET /health`)**: Verifies process-level vitality only (Node.js event loop responsive). Never queries downstream databases or caches, preventing cascading cluster-wide `CrashLoopBackOff` restart storms during transient external blips.
-   * **Readiness (`GET /ready`)**: Executes a schema-agnostic database connection pool check (`SELECT 1`). If the database is unreachable, it returns `HTTP 503`, prompting load balancers to temporarily pause routing to the pod without killing the container.
-8. **Graceful SIGTERM Connection Draining**: On shutdown signal, the server immediately sets `/ready` to `503` (halting new traffic), stops claiming new queue jobs, drains active in-flight HTTP requests via `server.close()`, and safely disconnects Prisma and Redis client pools within a 10-second deadline.
-9. **Hardened Multi-Stage Container**: The `Dockerfile` separates the TypeScript compilation environment (`builder`) from the production runtime (`runner`), strips dev dependencies, and drops root permissions to execute exclusively as non-root `USER node`.
+* **Root-Level Tenant Scoping & Anti-IDOR 404 Masking:** Every query scopes by `tenantId` at the root predicate and returns `HTTP 404 Not Found` (never `403`) on cross-tenant access attempts to block resource enumeration.
+* **Strict Input Sanitization:** Zod validation blocks backslash URI smuggling, `javascript:` XSS schemes, CRLF header injection, userinfo credential extraction, and non-HTTP(S) schemes with `HTTP 400`.
+* **GDPR/CCPA Salted IP Hashing:** Ingress hashes client IPs via salted SHA-256 (`IP_SALT`) so raw IP addresses are never logged or persisted.
+* **Reverse-Proxy Keep-Alive & Graceful SIGTERM Draining:** `keepAliveTimeout` (`65s`) and `headersTimeout` (`66s`) exceed standard 60s cloud LB timeouts to eliminate `502` race conditions; `SIGTERM` flips `/ready` to `503` and drains in-flight requests cleanly.
 
 ---
 
-## 📊 Verification & Benchmark Evidence
+## 📊 Verification Suite Summary
 
-The platform's invariants and performance characteristics have been validated via end-to-end automated test suites:
+All architecture, debugging, observability, resilience, runbook, and zero-downtime deployment invariants are backed by executable test harnesses and recorded audit logs:
 
-### Integration Suite Results (`apps/api/scripts/verify-module-09.ts`)
-```plaintext
-====================================================
-MODULE 09: INTEGRATION, CONCURRENCY & CHAOS SUITE
-====================================================
-[GUARDRAIL] Pre-flight isolation verified: NODE_ENV=test, DB=file:./dev.db
-[PASS] Test 1: Link created (201) and public redirect validated (302 Location + Cache HIT).
-[PASS] Test 2: Authentication perimeter enforced with standardized 401 error envelope.
-[PASS] Test 3: Anti-IDOR owner scoping enforced across GET, PATCH, and DELETE (HTTP 404).
-[PASS] Test 4: All 5 URL smuggling and protocol abuse vectors rejected with HTTP 400.
-[PASS] Test 5: Worker idempotency and P2002 deduplication verified (Exact-Once insert).
-[PASS] Test 6: Automated 30-day retention pruning successfully isolated and purged expired records.
-[PASS] Test 7: Route precedence and page_size hard limit ceiling verified.
-====================================================
-ALL MODULE 09 INTEGRATION TESTS PASSED (7/7)
-====================================================
-```
-
-### Production Readiness Suite (`apps/api/scripts/verify-module-10.ts`)
-```plaintext
-====================================================
-MODULE 10: PRODUCTION READINESS & DEPLOYMENT SUITE
-====================================================
-[PASS] Test 1: Liveness probe operational and RFC compliant (GET /health -> 200 OK in 2.60ms).
-[PASS] Test 2: Readiness probe verified DB connectivity (GET /ready -> 200 OK in 4.46ms).
-[PASS] Test 3: 0.0.0.0 container interface binding and dynamic port configuration verified.
-[PASS] Test 4: Graceful request drainage verified (in-flight request completed during active state).
-[PASS] Test 5: Multi-stage Dockerfile validated with container security hardening (USER node).
-[PASS] Test 6: GitHub Actions CI workflow verified (lint, build, and test gates).
-[PASS] Test 7: Production runbook, environment specifications, and rollback procedures verified.
-====================================================
-ALL MODULE 10 READINESS CHECKS PASSED (7/7)
-====================================================
-```
-
-*(Extracted from test audit logs in `progress/evidence/module-09/testing-verification.txt` and `progress/evidence/module-10/deploy-verification.txt`)*
+| Verification Harness / Audit Log | Scope & Proven Invariants | Result |
+|---|---|---|
+| [`progress/evidence/module-09/testing-verification.txt`](progress/evidence/module-09/testing-verification.txt) | 7/7 Integration, Anti-IDOR 404 scoping, 5 URL smuggling rejections, P2002 exact-once deduplication, 30-day retention pruning | **PASS (7/7)** |
+| [`progress/evidence/module-10/deploy-verification.txt`](progress/evidence/module-10/deploy-verification.txt) | 7/7 Cloud readiness (`/health` `2.60ms`, `/ready` `4.46ms`), `0.0.0.0` binding, graceful draining, Dockerfile & CI gates | **PASS (7/7)** |
+| [`apps/api/scripts/verify-module-06-debug.ts`](apps/api/scripts/verify-module-06-debug.ts) | Cache eviction on delete, exponential backoff (1s–8s), DLQ routing after 5 failures, `/ready` in `8.04ms` during 100% worker exhaustion | **PASS** |
+| [`scripts/verify-module-04-observability.ts`](scripts/verify-module-04-observability.ts) | Prometheus RED counters (`200`/`404`/`500`), histograms, gauges, `request_id` correlation, inline URI credential scrubbing, and `alerts.yml` validation | **PASS** |
+| [`scripts/verify-module-05-failure-modes.ts`](scripts/verify-module-05-failure-modes.ts) & [`scripts/verify-module-05-fix.ts`](scripts/verify-module-05-fix.ts) | Live DB outage (`503` in `8.39ms`), `1ms` `AbortSignal` timeout (`3ms`), DNS `ENOTFOUND` (`503`), and read-only failover (`503` + `Retry-After`) | **PASS** |
+| [`scripts/verify-module-06-resilience.ts`](scripts/verify-module-06-resilience.ts) | Slow provider timeout cutoff (`201ms` vs `3000ms` hang), `0ms` open-circuit fallback (`0` dead calls), `Closed → Open → Half-Open → Closed`, jittered retries, `0` retries on `401` | **PASS** |
+| [`scripts/verify-module-07-runbook-test.ts`](scripts/verify-module-07-runbook-test.ts) | Verbatim live execution of `docs/runbooks/high-error-rate.md` against simulated 500/503 outage (3 real gaps caught & patched) | **PASS** |
+| [`scripts/verify-module-08-deploy-rollback.ts`](scripts/verify-module-08-deploy-rollback.ts) | Rolling deploy gate blocks broken-DB v2 (`/live=200`, `/ready=503`), `0` dropped requests, `12ms` rollback to verified v1 (`config_fingerprint: 183ed1ef69cb`) | **PASS** |
 
 ---
 
-## 🚀 API Specification
+## 🌐 API Specification
 
-### System Probes
+### System Probes & Telemetry
 | Method | Route | Auth | Description |
 | :--- | :--- | :---: | :--- |
-| `GET` | `/health` | None | Process vitality probe (HTTP 200) |
-| `GET` | `/ready` | None | Dependency readiness check via `SELECT 1` (HTTP 200/503) |
+| `GET` | `/live`, `/health` | None | Lightweight dependency-free process vitality probe (`HTTP 200`, version & uptime) |
+| `GET` | `/ready` | None | 2s timeout-bounded DB readiness + cache, circuit breaker & `config_fingerprint` (`200`/`503`) |
+| `GET` | `/metrics` | None | Prometheus scrape endpoint (RED metrics, in-flight & queue gauges, heap/CPU metrics) |
 
-### Link Management (Protected)
+### Link Management & Notifications
 | Method | Route | Auth | Description |
 | :--- | :--- | :---: | :--- |
 | `POST` | `/links` | `X-API-Key` | Create shortened link with tags and optional custom code |
-| `GET` | `/links` | `X-API-Key` | List tenant links with bounded pagination |
-| `GET` | `/links/search`| `X-API-Key` | Query links by substring, tags, and date range |
-| `GET` | `/links/:id` | `X-API-Key` | Retrieve link details (Anti-IDOR: returns 404 if not owner) |
-| `PATCH`| `/links/:id` | `X-API-Key` | Update target URL and trigger active Redis cache invalidation |
-| `DELETE`|`/links/:id`| `X-API-Key` | Soft/hard delete link and evict cache |
+| `GET` | `/links` | `X-API-Key` | List tenant links with bounded pagination (`page_size <= 100`) |
+| `GET` | `/links/search` | `X-API-Key` | Query links by substring, tags, and date range |
+| `GET` | `/links/:id` | `X-API-Key` | Retrieve link details (Anti-IDOR: returns `404` if not owner) |
+| `PATCH` | `/links/:id` | `X-API-Key` | Update target URL and trigger active Redis cache invalidation |
+| `DELETE` | `/links/:id` | `X-API-Key` | Delete link and immediately evict redirect & tenant cache entries |
 | `GET` | `/links/:id/analytics` | `X-API-Key` | Aggregated click analytics over date window |
+| `POST` | `/notifications/send` | None | Multi-channel (`email`/`sms`/`push`) delivery via `opossum` circuit breaker (`200` / `202` fallback) |
 
 ### Public Ingress
 | Method | Route | Auth | Description |
 | :--- | :--- | :---: | :--- |
-| `GET` | `/r/:code` | None | High-throughput 302 redirect with Redis caching |
+| `GET` | `/r/:code` | None | Sub-10ms 302 redirect with Cache-Aside Redis acceleration & async click queueing |
 
 ---
 
 ## 💻 Local Quickstart
 
-### 1. Clone & Install
 ```bash
+# 1. Clone & install dependencies
 git clone https://github.com/vamsichowdarynalla2239-ship-it/linkscale.git
 cd linkscale
 npm install
-```
 
-### 2. Environment Setup
-Create `apps/api/.env`:
-```ini
-PORT=3000
-NODE_ENV=development
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/linkscale?schema=public"
-REDIS_URL="redis://localhost:6379"
-JWT_SECRET="development_super_secret_signing_key_min_64_characters_entropy_required"
-IP_SALT="development_salt_for_ip_anonymization_sha256"
-```
+# 2. Configure environment (copy contract and fill values)
+cp .env.example apps/api/.env
 
-### 3. Database Migration
-```bash
-cd apps/api
-npx prisma generate
-npx prisma migrate dev
-```
+# 3. Start PostgreSQL + Redis (or full containerized stack)
+docker compose -f infra/docker-compose.yml up -d postgres redis
 
-### 4. Running the Platform
-```bash
-# Terminal 1: Run HTTP Web API
-cd apps/api
-npm run dev
+# 4. Generate Prisma client, build & verify
+cd apps/api && npx prisma generate && npx prisma migrate dev
+cd ../.. && npm run lint && npm run build && npm test
 
-# Terminal 2: Run Background Analytics Worker
-cd apps/api
-npm run worker
-```
-
-### 5. Running Integration Tests
-Execute the full 7-point integration test suite:
-```bash
-npm test
+# 5. Run API and background worker
+npm run dev     # Terminal 1: HTTP API
+npm run worker  # Terminal 2: Click Analytics Worker
 ```
 
 ---
 
-## ☁️ Live Cloud Deployment Runbook
+## 🏆 Curriculum Provenance & Verified Scorecard
 
-Deploy this multi-service architecture to [Railway](https://railway.app/) or [Render](https://render.com/) in under 5 minutes:
+Engineered across all **three Upsk Production Engineering tracks** (**25 / 25 modules — 10.0 / 10.0 across every module & dimension**):
 
-### 1. Provision Managed Data Stores
-* **PostgreSQL 16**: Create a managed database instance &rarr; copy `DATABASE_URL`.
-* **Redis 7.x**: Create a managed Redis instance &rarr; copy `REDIS_URL`.
+| Track | Modules | Score | Core Competencies Demonstrated |
+|---|---|---|---|
+| **System Design Fundamentals** | 10 / 10 | **10.0 / 10.0** | Multi-tenant data modeling, Cache-Aside invalidation, async Redis queues, Anti-IDOR security, integration testing |
+| **Debugging & Incident Response** | 7 / 7 | **10.0 / 10.0** | Hypothesis-driven triage, bulkhead pool isolation, retry-storm DLQ remediation, blameless SRE postmortems |
+| **Production Readiness** | 8 / 8 | **10.0 / 10.0** | Multi-stage non-root Docker, CI/CD SHA pipelines, Twelve-Factor config, Prometheus RED alerting, FMEA, `opossum` circuit breakers, 3 AM runbooks, zero-downtime rollbacks |
 
-### 2. Provision Service 1 — Web API (`api`)
-* **Source**: Connect your GitHub repository.
-* **Root Directory**: `apps/api` (or build context `/` with `Dockerfile` at `apps/api/Dockerfile`).
-* **Environment Variables**:
-  * `NODE_ENV`: `production`
-  * `PORT`: `3000` (or dynamic platform `$PORT`)
-  * `DATABASE_URL`: `${{Postgres.DATABASE_URL}}`
-  * `REDIS_URL`: `${{Redis.REDIS_URL}}`
-  * `JWT_SECRET`: Generate via `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
-  * `IP_SALT`: Generate via `node -e "console.log(require('crypto').randomBytes(16).toString('hex'))"`
-* **Pre-Deploy Command (Release Phase)**:
-  ```bash
-  npx prisma migrate deploy
-  ```
-  *(Runs migrations safely before new container replicas boot, eliminating startup race conditions).*
-* **Healthcheck Path**: `/health`
-* **Networking**: Generate a public domain (e.g. `https://linkscale-api.up.railway.app`).
-
-### 3. Provision Service 2 — Background Worker (`worker`)
-* **Source**: Add a second service from the same repository.
-* **Custom Start Command**:
-  ```bash
-  node dist/workers/run-worker.js
-  ```
-* **Environment Variables**: Same `DATABASE_URL`, `REDIS_URL`, and `IP_SALT`.
-* **Networking**: Disable public ingress (internal background consumer).
-
-### 4. Zero-Downtime Rollback Plan
-Because migrations follow the **Expand-and-Contract** pattern (additive changes only):
-* If a new code release encounters issues, roll back container images immediately to the prior Git commit SHA.
-* Zero database schema rollbacks are required—existing `v1` containers remain 100% compatible with the expanded database schema.
-
----
-
-## 📜 Curriculum Provenance & Scorecard
-Developed during the **Upsk Engineering Bootcamp (System Design Fundamentals - Operator Pack)**, achieving a verified **10.0 / 10.0 (Strong)** evaluation across all five engineering dimensions:
-* **Tradeoff Reasoning**: 5.0 / 5.0
-* **Debugging & Incident Triage**: 5.0 / 5.0
-* **Security & Multi-Tenant Defense**: 5.0 / 5.0
-* **Production Thinking & SRE Invariants**: 5.0 / 5.0
-* **Technical Communication**: 5.0 / 5.0
-
-Full audit trail and decision logs: [progress/state.json](progress/state.json).
+Full verified portfolio showcase: [upsk.to/vamsichowdarynalla22](https://www.upsk.to/vamsichowdarynalla22) · Audit trail & decision logs: [`progress/state.json`](progress/state.json).
 
 ---
 
