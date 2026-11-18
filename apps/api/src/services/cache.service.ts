@@ -259,6 +259,11 @@ export class CacheService {
     this.memoryStore.delete(key);
   }
 
+  public getHealthStatus(): 'connected' | 'degraded_fallback' {
+    if (this.simulatedOutage) return 'degraded_fallback';
+    return this.isConnected ? 'connected' : 'degraded_fallback';
+  }
+
   public async close(): Promise<void> {
     if (this.redisClient) {
       try {

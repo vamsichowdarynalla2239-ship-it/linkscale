@@ -1,0 +1,15 @@
+{
+  "step": "context",
+  "module": 3,
+  "micro_exercise": {
+    "environment_variables_audit": [
+      { "variable": "PORT", "nature": "per_environment", "rationale": "Locally 3000; assigned by orchestrator/ingress in staging and prod" },
+      { "variable": "NODE_ENV", "nature": "per_environment", "rationale": "Drives logging verbosity, optimization flags, and error stack trace exposure" },
+      { "variable": "DATABASE_URL", "nature": "per_environment", "rationale": "Local container vs staging replica vs multi-AZ production primary" },
+      { "variable": "REDIS_URL", "nature": "per_environment", "rationale": "Local loopback vs isolated managed cache instances" },
+      { "variable": "LOG_LEVEL", "nature": "per_environment", "rationale": "Verbose debug logs locally vs structured info/error in production" },
+      { "variable": "JWT_SECRET", "nature": "per_environment", "rationale": "Cryptographic separation ensures compromised dev keys cannot forge prod tokens" }
+    ],
+    "first_run_experience": "Without startup schema validation, missing environment variables cause silent downstream failures (e.g. database connection refused or unhandled undefined reference). With strict startup schema validation (Zod/Twelve-Factor), the process crashes immediately at line 1 of boot with a clear enumeration of missing variables and pointers to .env.example."
+  }
+}

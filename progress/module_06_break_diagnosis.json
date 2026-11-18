@@ -1,0 +1,21 @@
+{
+  "step": "break",
+  "module": 6,
+  "diagnosed_failures": {
+    "failure_a_runaway_retry": {
+      "symptom": "Single slow request causes CPU/memory spike and hundreds of retry logs",
+      "root_cause": "Unbounded retry loop (maxRetries removed or set to Infinity) without a hard retry cap or maxDelay bound, spawning endless timers and exhausting event-loop/memory resources.",
+      "remediation": "Enforce strict maxRetries=3 cap and maxDelayMs=2000 upper bound in retryWithBackoff, plus defensive input validation rejecting non-finite or excessive retry caps."
+    },
+    "failure_b_circuit_never_heals": {
+      "symptom": "Circuit breaker opens properly on outage, but never reconnects after dependency restarts",
+      "root_cause": "Broken half-open transition (absurdly high resetTimeout or faulty custom state machine refusing to transition HALF_OPEN -> CLOSED on successful probe).",
+      "remediation": "Use opossum with calibrated resetTimeout (30000ms) and verify automated Closed -> Open -> Half-Open -> Closed transitions via integration drill."
+    },
+    "failure_c_synchronized_stampede": {
+      "symptom": "Recovering dependency is repeatedly knocked back offline by synchronized retry waves at identical timestamps",
+      "root_cause": "Missing randomized jitter in exponential backoff calculation (fixed 100/200/400/800ms intervals cause thundering herd convergence across concurrent requests).",
+      "remediation": "Apply randomized jitter (+/- jitterMs or full jitter) on every backoff delay so concurrent retries spread evenly over the recovery window."
+    }
+  }
+}

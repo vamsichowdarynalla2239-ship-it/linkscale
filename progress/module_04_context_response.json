@@ -1,0 +1,11 @@
+{
+  "step": "context",
+  "module": 4,
+  "micro_exercise": {
+    "debugging_without_observability": "Without telemetry, diagnosing slowness requires crude host inspections (top, netstat), speculative hypothesis testing, and invasive redeployments with ad-hoc prints. Isolating the bottleneck takes hours. Observability instruments the system to reveal whether slowness stems from upstream ingress spikes, database locks, cache misses, or downstream provider delays within seconds.",
+    "liveness_vs_readiness": {
+      "liveness_probe": "/live asserts process event-loop health. Failure triggers container restart by the orchestrator.",
+      "readiness_probe": "/ready asserts backing dependency connectivity (PostgreSQL, Redis). Failure instructs the ingress router to withdraw traffic without restarting the container, preventing cascading restart loops."
+    }
+  }
+}

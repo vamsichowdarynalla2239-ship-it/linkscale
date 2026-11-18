@@ -1,0 +1,19 @@
+{
+  "step": "break",
+  "module": 3,
+  "symptoms": [
+    "Docker environment variables passed via -e are ignored because .env overrides runtime variables",
+    "A required configuration variable is omitted from Zod validation, causing delayed runtime crashes instead of startup aborts",
+    "Backing services have silent localhost defaults that fail when running inside containerized production environments"
+  ],
+  "root_causes": {
+    "defect_1_env_override_inversion": "dotenv was invoked with override: true or unconditional file loading that overwrites existing process.env variables injected by Docker/Kubernetes. True Twelve-Factor compliance requires process.env to always take precedence over local .env files.",
+    "defect_2_unvalidated_runtime_dependency": "A critical service credential was left off the schema or configured as optional with delayed access, defeating fail-fast boot protection.",
+    "defect_3_silent_localhost_fallbacks": "Specifying default values pointing to localhost (e.g. localhost:5432) for production backing dependencies. Inside a container, localhost points to the container's isolated network namespace, turning missing production config into confusing connection-refused errors."
+  },
+  "remediation": [
+    "Ensure dotenv only populates missing keys and never overrides existing process.env variables.",
+    "Declare all runtime dependencies in Zod schema with strict type and length assertions.",
+    "Eliminate dangerous localhost defaults for primary database and production backing services; make them strictly required."
+  ]
+}

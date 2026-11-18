@@ -1,0 +1,8 @@
+{
+  "step": "context",
+  "module": 8,
+  "micro_exercise": {
+    "live_vs_ready_audit": "Currently GET /live returns 200 {ok:true} (process alive) and GET /ready runs prisma.$queryRawUnsafe('SELECT 1') to check DB connectivity. What /ready still misses: Redis cache check status, notification circuit-breaker state visibility, explicit per-check latency breakdown, bounded probe timeouts so /ready never hangs, and exposing the deployed APP_VERSION/git SHA for fleet verification.",
+    "error_rate_doubling_first_two_minutes": "Prometheus HighErrorRate alert fires after 2m sustained >5% 5xx and pages linkscale-primary via PagerDuty linking directly to docs/runbooks/high-error-rate.md. Minute 0-1: Execute Step 0/1/2 (/ready + /metrics 5xx slice) to confirm regression correlates with the deploy SHA. Minute 1-2: Execute documented PREV_SHA rollback command and confirm /live + /ready return 200 with flat 5xx counters."
+  }
+}

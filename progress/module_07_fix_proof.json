@@ -1,9 +1,10 @@
 {
-  "summary": "Restored eventId persistence in ClickWorker and verified database-level idempotency and deduplication.",
-  "evidence": [
-    "Restored eventId: job.eventId in click.worker.ts during prisma.clickEvent.create.",
-    "Executed verify-module-07.ts: confirmed duplicate job replay triggered P2002 constraint collision, returned status: deduplicated, and maintained click count at 3.",
-    "Validated 100% pass across all 8 checks including async ingestion, tenant isolation, zero raw IPs stored, queue-down drill, and 30-day retention purge."
-  ]
+  "step": "fix",
+  "module": 7,
+  "documentation_hardening": [
+    "Added Step 0 live container/port/sidecar drift verification (`docker ps --format`) at the top of docs/runbooks/high-error-rate.md.",
+    "Added Last Verified timestamp header linking directly to executable test harness scripts/verify-module-07-runbook-test.ts.",
+    "Re-ran full end-to-end live runbook simulation confirming 503 diagnosis, Prometheus 5xx counter extraction, and 200 recovery verification."
+  ],
+  "drift_prevention_policy": "Treat runbooks as living artifacts: require runbook review on infrastructure PRs, update immediately after every incident, and run quarterly GameDay drills."
 }
-

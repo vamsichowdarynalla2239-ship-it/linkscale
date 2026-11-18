@@ -1,0 +1,7 @@
+{
+  "interlude": "Facebook Disappears From the Internet (October 2021 BGP Outage)",
+  "reflection_answers": {
+    "question_1_monitoring_independence": "Hosting observability, alerting, DNS, and incident communications on the same fault domain as production creates a fatal circular dependency ('locking the keys inside the building'). Production monitoring must run out-of-band on an independent cloud provider/network, supplemented by external synthetic probes (black-box uptime checks), a dead-man's switch alert that pages when metrics stop arriving, and out-of-band incident communication + physical access fail-safes.",
+    "question_2_routine_operation_blast_radius": "Routine changes with catastrophic global blast radius include BGP/DNS routing updates, TLS certificate rotation, firewall/security-group rules, shared database connection string/IAM policy updates, and reverse-proxy config reloads. Mitigating them requires automated config audit guards (blocking withdrawal of >N% of routes), staged blast-radius rollouts (canary PoP first), and dead-man auto-rollback timers if control-plane connectivity drops."
+  }
+}

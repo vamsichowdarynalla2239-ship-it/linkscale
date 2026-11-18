@@ -1,0 +1,21 @@
+{
+  "step": "break",
+  "module": 8,
+  "diagnosed_production_issues": {
+    "issue_1_shallow_readiness_blindspot": {
+      "symptom": "/ready returns 200 OK with database='connected' while real business endpoints fail",
+      "root_cause": "SELECT 1 only proves TCP connectivity to the DB engine; it misses missing tables/unapplied Prisma migrations, broken application business logic, or broken downstream API paths because post-deploy smoke tests never exercised a real functional endpoint.",
+      "remediation": "Upgrade /ready to query an actual schema table (e.g., lightweight link count/existence probe) and add functional end-to-end business smoke checks to the CI post-deploy verification gate."
+    },
+    "issue_2_slow_memory_leak": {
+      "symptom": "Service heap memory climbs monotonically over time without crashing immediately",
+      "root_cause": "Unbounded in-memory collection (e.g., uncapped fallbackQueue, un-evicted Map entries, or leaked event listeners) retaining object references per request, invisible to connectivity-only /ready checks until OS OOM-kill (ExitCode 137).",
+      "remediation": "Enforce strict upper bounds (e.g., MAX_FALLBACK_QUEUE_SIZE = 1000) on all in-memory buffers/queues, configure container memory limits + --max-old-space-size, and add a Prometheus HighMemoryUsage / HeapGrowth alert rule in infra/alerts.yml."
+    },
+    "issue_3_out_of_band_config_drift": {
+      "symptom": "Runtime configuration value diverges from what was last deployed through the CI/CD pipeline",
+      "root_cause": "Manual ClickOps edit directly in the production platform UI bypassing GitOps/CI/CD, breaking auditability and reproducibility.",
+      "remediation": "Lock production config to version-controlled manifests (fly.toml) and secret-manager audit trails, log a non-secret configuration hash/fingerprint at startup for drift detection, and forbid ad-hoc UI edits."
+    }
+  }
+}

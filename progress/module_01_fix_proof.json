@@ -1,0 +1,15 @@
+{
+  "step": "fix",
+  "module": 1,
+  "remediation": {
+    "caching_fix": "Enforced manifest-first copying (COPY package.json package-lock.json* ./) prior to dependency installation (RUN npm ci / npm install), preserving Docker layer caching across source-only changes.",
+    "context_isolation": "Enforced .dockerignore ensuring .env, .env.*, .git, test suites, and uncompiled files are excluded from image build context.",
+    "security_hardening": "Maintained unprivileged execution via appuser:appgroup and active HEALTHCHECK probe targeting http://localhost:${PORT:-3000}/live."
+  },
+  "verification_results": {
+    "layer_order": "CORRECT (package manifest -> npm install -> copy src -> build -> runner)",
+    "security": "PASSED (non-root USER appuser)",
+    "healthcheck": "PASSED (HTTP GET /live returns 200 OK)",
+    "secrets_exposure": "PREVENTED (.dockerignore excludes .env, .git)"
+  }
+}

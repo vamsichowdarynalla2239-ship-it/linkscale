@@ -1,0 +1,16 @@
+{
+  "step": "context",
+  "module": 7,
+  "micro_exercise": {
+    "env_vars_and_dependencies_inventory": {
+      "env_vars": ["APP_ENV", "NODE_ENV", "PORT", "DATABASE_URL", "JWT_SECRET", "CORS_ORIGIN", "LOG_LEVEL", "REDIS_URL"],
+      "dependencies": ["Primary Database (PostgreSQL/SQLite via Prisma)", "Redis Cache & Queue Broker", "External Notification Providers (SendGrid, Twilio, Firebase)", "OS DNS Resolver", "Container Runtime"]
+    },
+    "first_three_commands_for_slow_service": [
+      "curl -sS -w '\\nhttp_code=%{http_code} time_total=%{time_total}s\\n' http://localhost:3000/ready",
+      "curl -sS http://localhost:3000/metrics | grep -E '^(http_requests_in_flight|circuit_breaker_state|http_request_duration_seconds_bucket)'",
+      "docker logs --since 10m linkscale-api | grep -E '\"level\":\"(warn|error)\"|dependency_timeout|circuit_opened' | tail -n 30"
+    ],
+    "3am_principle": "Under sleep deprivation (~0.10% BAC cognitive impairment), vague advice like 'restart the service' causes catastrophic typos (docker rm vs docker restart). Copy-pasteable commands with exact expected outputs remove memory reliance."
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "interlude": "GitLab Deletes Their Production Database",
+  "reflection_answers": {
+    "question_1_monitoring_vs_verifying": "Monitoring execution checks process invocation (e.g., cron exit code 0 or job start timestamp), which falsely signals health even if pg_dump writes an empty file or aborts silently. Verifying outcome requires automated disaster recovery testing: restoring the artifact into an isolated sandbox database, running integrity checksums, and asserting schema and row count invariants.",
+    "question_2_convention_vs_infrastructure": "Conventions rely on human memory and visual cues (like prompt colors), which predictably break down under crisis, sleep deprivation, and high-stress troubleshooting. Hard infrastructure controls must enforce isolation: distinct IAM roles without direct destructive terminal access on production primaries, break-glass multi-person approvals, distinct cloud VPC boundaries, and read-only default permissions so no single developer or DBA can execute unverified destructive operations."
+  }
+}

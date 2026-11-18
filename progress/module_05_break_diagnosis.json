@@ -1,0 +1,21 @@
+{
+  "step": "break",
+  "module": 5,
+  "diagnosed_failure_modes": {
+    "option_a_dns_resolution_failure": {
+      "symptom": "API returns connection errors (ENOTFOUND / getaddrinfo failed) while database container is running and healthy",
+      "root_cause": "DNS resolution failure or corrupted /etc/hosts entry resolving postgres hostname to wrong IP (127.0.0.1) or failing lookup before TCP handshake even begins.",
+      "diagnostic_proof": "Testing direct IP connectivity succeeds while hostname lookup fails (`nslookup`/`getent hosts`), proving the database is healthy and the fault lies strictly in DNS/name resolution."
+    },
+    "option_b_slow_dependency": {
+      "symptom": "GET /live returns 200 OK, yet real API latency jumps from 200ms to 5000ms and requests time out",
+      "root_cause": "Grey failure (slow database/downstream dependency without strict query/socket timeouts). Because /live only checks Node event-loop health, it stays green while database-dependent routes hold open pool connections until saturation.",
+      "diagnostic_proof": "Correlating http_request_duration_seconds p95 spike against DB query timings and http_requests_in_flight gauge reveals connection pool saturation caused by slow downstream responses."
+    },
+    "option_c_partial_read_only_failure": {
+      "symptom": "GET endpoints work normally and aggregate 'up' monitoring stays green, while all POST/PUT/DELETE mutations fail",
+      "root_cause": "Partial failure caused by database failover to a read-only replica (`default_transaction_read_only=on`), disk-full read-only filesystem remount, or split-brain write-leader loss. Aggregate health checks executing only `SELECT 1` miss write-path failure completely.",
+      "diagnostic_proof": "Checking `SHOW transaction_read_only;` on PostgreSQL and slicing `http_requests_total` by `method` immediately isolates 100% failure on POST/PUT/DELETE with 0% failure on GET."
+    }
+  }
+}

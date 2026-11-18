@@ -1,15 +1,33 @@
 {
-  "summary": "Completed Module 02 BUILD step: implemented multi-tenant relational schema, Prisma migrations, and query-by-code verification",
-  "evidence": [
-    "Defined Tenant, Link, and ClickEvent models in apps/api/prisma/schema.prisma with unique code constraint and composite indexes",
-    "Applied Prisma migration generating relational schema and verified client generation",
-    "Executed scripts/module-02-seed-query.ts proving core query shape: inserted code acme-launch and matched long_url https://acme.example.com/products/launch-2026",
-    "Saved execution evidence in progress/evidence/module-02/query-by-code.txt"
+  "step": "build",
+  "module": 2,
+  "pipeline_file": ".github/workflows/ci.yml",
+  "pipeline_stages": [
+    {
+      "stage": "lint_and_test",
+      "commands": ["npm ci", "cd apps/api && npx prisma generate", "npm run lint", "npm run build", "npm test"],
+      "fail_fast": true
+    },
+    {
+      "stage": "docker_build",
+      "tagging": ["myservice:${{ github.sha }}", "myservice:latest"],
+      "gated_by_tests": true
+    },
+    {
+      "stage": "size_guardrail",
+      "max_bytes": 209715200,
+      "rule": "fails pipeline if image size exceeds 200MB"
+    },
+    {
+      "stage": "registry_push",
+      "registry": "ghcr.io",
+      "secret_handling": "${{ secrets.GITHUB_TOKEN }} (no hardcoded credentials)",
+      "branch_gate": "github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    }
   ],
-  "artifacts": [
-    "apps/api/prisma/schema.prisma",
-    "apps/api/scripts/module-02-seed-query.ts",
-    "progress/evidence/module-02/query-by-code.txt"
-  ]
+  "pipeline_hardening": {
+    "timeout_minutes": 15,
+    "dependency_caching": "npm cache key mapped to **/package-lock.json",
+    "git_sha_immutability": true
+  }
 }
-

@@ -1,0 +1,21 @@
+{
+  "step": "break",
+  "module": 4,
+  "diagnosed_scenarios": {
+    "scenario_1_silent_failure": {
+      "symptom": "HTTP 500 increments http_requests_total metric, but no error log appears",
+      "root_cause": "Swallowed catch block returning res.status(500) directly without invoking logger.error() or forwarding via next(err) to globalErrorHandler.",
+      "remediation": "Always delegate exceptions to centralized globalErrorHandler via next(err) and emit structured error logs with stack trace and request_id."
+    },
+    "scenario_2_cardinality_bomb": {
+      "symptom": "GET /metrics grows linearly in payload size and memory consumption with each unique user or request",
+      "root_cause": "High-cardinality unbounded values (user_id, request_id, raw dynamic paths) attached as Prometheus metric labels, creating millions of time series.",
+      "remediation": "Restrict Prometheus labels to strictly bounded low-cardinality dimensions (method, normalized route template /r/:code, status) and keep user_id/request_id exclusively in structured logs."
+    },
+    "scenario_3_missing_request_id": {
+      "symptom": "Every log line emits request_id: null or undefined, breaking cross-log correlation",
+      "root_cause": "Middleware ordering bug (loggingMiddleware registered before requestIdMiddleware) or broken header extraction without UUID fallback.",
+      "remediation": "Mount requestIdMiddleware as the very first Express middleware, normalize x-request-id header lookup, generate a crypto.randomUUID() fallback, and reflect X-Request-Id in the response header."
+    }
+  }
+}

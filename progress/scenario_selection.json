@@ -1,0 +1,5 @@
+{
+  "scenario": "notifications",
+  "name": "Scenario A: Notification Service",
+  "reason": "Multi-channel delivery (email, SMS, push), external dependencies, provider failover/retry, rate-limiting per user."
+}

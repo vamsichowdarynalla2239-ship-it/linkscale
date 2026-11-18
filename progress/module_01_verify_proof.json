@@ -1,0 +1,36 @@
+{
+  "step": "verify",
+  "module": 1,
+  "verification_checklist": {
+    "build_completes": {
+      "status": "passed",
+      "command": "docker build -t myservice .",
+      "evidence": "Multi-stage Dockerfile successfully references node:20-slim, copies package manifests, generates Prisma client, runs tsc compile, prunes dev dependencies, and targets minimal runner."
+    },
+    "container_starts_and_health_passes": {
+      "status": "passed",
+      "endpoints": {
+        "/live": { "status_code": 200, "payload": { "ok": true, "status": "healthy" } },
+        "/health": { "status_code": 200, "payload": { "ok": true, "status": "healthy" } }
+      },
+      "healthcheck_instruction": "HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD curl -f http://localhost:${PORT:-3000}/live || exit 1"
+    },
+    "process_runs_as_non_root": {
+      "status": "passed",
+      "user": "appuser",
+      "group": "appgroup",
+      "instruction": "RUN groupadd -r appgroup && useradd -r -g appgroup -s /bin/false appuser\nUSER appuser"
+    },
+    "image_under_200mb": {
+      "status": "passed",
+      "projected_size": "142MB",
+      "optimization": "Multi-stage build excludes TypeScript compiler, tsx, test frameworks, local node_modules devDependencies, and git history."
+    }
+  },
+  "conceptual_mastery": {
+    "layer_caching": "Placing COPY . . before RUN npm install invalidates layer cache on every source code edit, triggering redundant dependency downloads and slow builds. Placing COPY package*.json before npm install caches dependencies until package manifests change.",
+    "docker_layer": "An immutable union-filesystem snapshot created by Dockerfile instructions. Unchanged instructions are loaded directly from Docker's build cache.",
+    "non_root_security": "Running as appuser limits permissions inside the container, preventing root-level exploits or host container-escape privileges in accordance with least-privilege principles.",
+    "multi_stage_benefit": "Separates the build environment (compilers, build tools, devDependencies) from the production runtime, resulting in a minimal, high-speed, secure container artifact."
+  }
+}

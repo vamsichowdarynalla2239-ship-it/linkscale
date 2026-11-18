@@ -1,11 +1,39 @@
 {
-  "summary": "Completed Module 04 Step 3 BUILD: implemented ApiKey model with SHA-256 hash verification, auth middleware returning 401 on unauthenticated management routes, strict tenant query scoping with 404 on cross-tenant requests, and dual-tier rate limiting (30/min for creation, 120/min for redirects) returning 429.",
-  "evidence": [
-    "Unauthenticated requests to /links returned HTTP 401 Unauthorized.",
-    "Valid API key requests returned HTTP 200 OK and created links scoped to the authenticated tenantId.",
-    "IDOR defense verified: Tenant B querying Tenant A's link returned HTTP 404 Not Found without leaking metadata.",
-    "Rate limiting verified: POST /links throttled at request #30 and GET /r/:code throttled at request #120 with HTTP 429.",
-    "Saved execution evidence to progress/evidence/module-04/auth-verification.txt."
-  ]
+  "step": "build",
+  "module": 4,
+  "observability_pillars": {
+    "structured_logging": {
+      "file": "apps/api/src/utils/logger.ts",
+      "required_fields": ["timestamp", "level", "message", "service_name", "request_id"],
+      "security_hardening": "Automatic secret key redaction, CRLF neutralization, and inline URI credential scrubbing (://[REDACTED]@)"
+    },
+    "prometheus_metrics": {
+      "files": ["apps/api/src/utils/metrics.ts", "apps/api/src/middleware/metrics.middleware.ts", "apps/api/src/app.ts"],
+      "endpoint": "GET /metrics",
+      "metrics": [
+        "http_requests_total{method,path,status}",
+        "http_request_duration_seconds{method,path,status}",
+        "Node.js default process metrics (CPU, memory, event loop lag)"
+      ],
+      "cardinality_protection": "Normalizes dynamic route segments (/r/:code, /links/:id) to prevent time-series explosion"
+    },
+    "alert_definitions": {
+      "file": "infra/alerts.yml",
+      "rules": [
+        { "name": "HighErrorRate", "threshold": "5xx > 5% over 5m", "for": "2m", "severity": "critical" },
+        { "name": "HighLatency", "threshold": "p95 > 2s over 5m", "for": "3m", "severity": "warning" },
+        { "name": "ServiceDown", "threshold": "up == 0", "for": "1m", "severity": "critical" }
+      ]
+    }
+  },
+  "failure_first_drill": {
+    "script": "scripts/verify-module-04-observability.ts",
+    "result": "PASSED",
+    "verified_counters": {
+      "GET /live 200": 6,
+      "GET /health 200": 2,
+      "GET /unknown-route 404": 1,
+      "GET /debug/simulate-error 500": 1
+    }
+  }
 }
-

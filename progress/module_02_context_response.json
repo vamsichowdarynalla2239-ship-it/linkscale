@@ -1,0 +1,14 @@
+{
+  "step": "context",
+  "module": 2,
+  "micro_exercise": {
+    "manual_steps": [
+      "1. Static type checking & lint verification (npm run build / tsc --noEmit)",
+      "2. Unit and integration test execution (npm test)",
+      "3. Container build verification (docker build -t app:test .)",
+      "4. Container liveness & readiness check (curl localhost:3000/live)",
+      "5. Git working tree audit (git status to verify no uncommitted changes)"
+    ],
+    "scaling_failure_modes": "Manual execution fails at scale due to human fatigue, skipped tests during crunch time, environment divergence across developer workstations, and dirty local builds containing untracked files. Automated CI/CD provides a deterministic clean-room execution environment on every commit."
+  }
+}

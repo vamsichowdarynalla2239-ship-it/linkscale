@@ -1,9 +1,32 @@
 {
-  "summary": "Completed Module 04 Step 4 VERIFY: verified authentication vs authorization boundaries (401 vs 404), operational zero-downtime key rotation procedures, and edge-caching requirements for unauthenticated public redirects.",
-  "evidence": [
-    "Differentiated authentication (identity verification via 401) from authorization (permission scoping via 404 to eliminate IDOR enumeration).",
-    "Detailed zero-downtime credential rotation strategy using overlapping active keys in the 1:N ApiKey database schema with atomic revocation.",
-    "Explained latency and reachability requirements for keeping public redirect endpoints unauthenticated."
-  ]
+  "step": "verify",
+  "module": 4,
+  "checklist": {
+    "metrics_verification": {
+      "status": "passed",
+      "endpoint": "GET /metrics",
+      "counters": "http_requests_total broken down by method, path, status (verified 200, 404, 500)",
+      "histograms": "http_request_duration_seconds populated across buckets [0.005..5]",
+      "gauges": "http_requests_in_flight and business gauge notification_queue_depth{channel=email|sms|push}"
+    },
+    "structured_logging_verification": {
+      "status": "passed",
+      "required_fields": ["timestamp", "level", "message", "request_id", "service_name"],
+      "sanitization": "Inline credentials scrubbed to ://[REDACTED]@ and CRLF injection neutralized"
+    },
+    "error_logging_correlation": {
+      "status": "passed",
+      "proof": "Simulated 500 on /debug/simulate-error emitted both error-level exception log with stack trace and HTTP summary log sharing exact request_id req-500-drill"
+    },
+    "alert_completeness": {
+      "status": "passed",
+      "file": "infra/alerts.yml",
+      "alerts": ["HighErrorRate (5xx > 5% for 2m)", "HighLatency (p95 > 2s for 3m)", "ServiceDown (up == 0 for 1m)"],
+      "actionability": "Each alert contains PromQL expr, threshold, for-window, severity, summary, templated description, and runbook link"
+    }
+  },
+  "conceptual_answers": {
+    "3am_triage_order": "Alert notifies THAT an anomaly exists -> Dashboard/Metrics reveal WHAT is affected (endpoints, blast radius, onset time) -> Structured Logs correlated by request_id reveal WHY (exact error, stack trace, payload metadata).",
+    "monitoring_vs_observability": "Monitoring tracks known-unknowns via predefined thresholds and dashboards. Observability provides high-cardinality structured context enabling engineers to ask novel questions about unknown-unknowns without deploying new instrumentation."
+  }
 }
-

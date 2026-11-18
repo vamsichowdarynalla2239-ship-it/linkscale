@@ -1,9 +1,9 @@
 {
-  "summary": "Restored active cache invalidation in updateLink and verified end-to-end Cache-Aside eviction with zero stale data.",
-  "evidence": [
-    "Restored cacheService.invalidateRedirectTarget(existing.code) in updateLink within link.service.ts immediately following PostgreSQL commit.",
-    "Ran verify-module-06.ts regression test: confirmed Redirect 3 yielded X-Cache: MISS with updated destination URL https://acme.example.com/v2/new-destination-page.",
-    "Validated subsequent Redirect 4 yielded X-Cache: HIT with updated URL, and DELETE /links/:id evicted cache resulting in immediate 404 Not Found."
-  ]
+  "step": "fix",
+  "module": 6,
+  "hardening_applied": {
+    "bounded_retry_guardrail": "Clamped maxRetries to finite [0..10] and maxDelayMs <= 30000 in apps/api/src/utils/resilience.ts, preventing Infinity runaway retry loops.",
+    "guaranteed_jitter_floor": "Enforced minimum jitterMs >= 5ms so retry schedules can never collapse into synchronized thundering-herd waves.",
+    "verified_full_recovery_cycle": "Verified Closed -> Open (201ms timeout / 0ms open fallback / 0 dead calls) -> Half-Open -> Closed recovery via scripts/verify-module-06-resilience.ts."
+  }
 }
-

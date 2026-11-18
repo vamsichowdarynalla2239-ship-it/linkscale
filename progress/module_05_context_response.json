@@ -1,0 +1,24 @@
+{
+  "step": "context",
+  "module": 5,
+  "micro_exercise": {
+    "dependency_inventory": [
+      {
+        "dependency": "Primary Database (PostgreSQL/SQLite via Prisma)",
+        "if_down_60s": "GET /ready returns 503, writes and cache-miss reads fail with 503/500; cached hot redirects continue serving if Redis is intact.",
+        "if_100x_slower": "Without strict query timeouts and pool isolation, active DB connections saturate the connection pool, stalling all incoming requests including /ready and triggering upstream load balancer eviction."
+      },
+      {
+        "dependency": "Redis (Cache & Message Queue Broker)",
+        "if_down_60s": "Cache gracefully falls back to primary DB (elevating DB read QPS); queue falls back to bounded in-memory buffer.",
+        "if_100x_slower": "Every redirect blocks waiting on Redis command timeout before even attempting DB fallback, inflating P99 latency above SLA unless aggressive socket/command timeouts (<100ms) and circuit breakers trip."
+      },
+      {
+        "dependency": "External Notification Providers (SendGrid, Twilio, Firebase)",
+        "if_down_60s": "Immediate HTTP 5xx/ECONNREFUSED triggers async retry queue fallback without blocking API threads.",
+        "if_100x_slower": "Unbounded HTTP client waits exhaust worker concurrency slots and memory, starving healthy notification channels (e.g., slow SMS provider taking down email/push delivery)."
+      }
+    ],
+    "down_vs_slow_conclusion": "Slow is far more dangerous than down. Hard failures fail fast and free resources immediately; slow dependencies silently consume threads, sockets, memory, and connection pool slots until healthy unrelated routes collapse in a cascading outage."
+  }
+}

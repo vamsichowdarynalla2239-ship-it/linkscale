@@ -1,14 +1,30 @@
 {
-  "summary": "Implemented database-native search (GET /links/search) with strict top-level tenant isolation, bounded pagination (max page_size 100), allowlisted sorting (created_at, expires_at, clicks), and substring/tag filtering. Ran verify-module-08.ts test harness passing all 8 checks.",
-  "evidence": [
-    "Route Precedence: GET /links/search correctly returns HTTP 200 before /links/:id without routing collision",
-    "Keyword Search: GET /links/search?q=launch successfully matched 2 links for Tenant A",
-    "Tag Filtering: GET /links/search?tag=marketing filtered 2 links for Tenant A",
-    "Combined Search: GET /links/search?q=ai&tag=marketing returned 1 link",
-    "Pagination Calculations: page=1, 2, 3 with page_size=2 returned 2, 2, 1 items respectively with total=5 and total_pages=3",
-    "Ceiling Enforcement: GET /links/search?page_size=500 rejected with HTTP 400 VALIDATION_ERROR",
-    "Sorting Allowlist: sort_by=clicks sorted top link with 12 clicks first; sort_by=malicious rejected with HTTP 400",
-    "Multi-Tenant Isolation: Tenant B searching q=launch returned 1 link, zero Tenant A links leaked"
-  ]
+  "step": "build",
+  "module": 8,
+  "deployment_artifacts": [
+    "fly.toml",
+    "infra/docker-compose.yml",
+    ".github/workflows/ci.yml",
+    "apps/api/src/app.ts",
+    "apps/api/src/services/cache.service.ts"
+  ],
+  "deploy_strategy": "rolling",
+  "rollback_strategy": "automated",
+  "readiness_hardening": {
+    "live_endpoint": "GET /live returns lightweight dependency-free 200 with version and uptime_seconds",
+    "ready_endpoint": "GET /ready verifies DB SELECT 1 with explicit 2000ms timeout, reports cache status, circuit breaker state, version SHA, and uptime_seconds; returns 503 with detailed checks on failure"
+  },
+  "pipeline_integration": {
+    "gated_on": "needs: [pipeline] and push to main only",
+    "tagging": "Immutable git commit SHA (${{ github.sha }})",
+    "post_deploy_verification": "30-attempt /ready poll + /live, /ready, /metrics & version SHA smoke test",
+    "automated_rollback": "if: failure() executes flyctl releases rollback"
+  },
+  "rollback_drill_evidence": {
+    "script": "scripts/verify-module-08-deploy-rollback.ts",
+    "v1_baseline": "200 OK on /live, /ready, /metrics with version=sha-v1-5cf9f89",
+    "v2_broken_db": "/live=200 while /ready=503 (checks.database=disconnected)",
+    "traffic_protection": "Rolling gate halted v2 promotion with 0 dropped requests",
+    "measured_rollback_time_ms": 10
+  }
 }
-

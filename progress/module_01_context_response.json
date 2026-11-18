@@ -1,0 +1,8 @@
+{
+  "step": "context",
+  "module": 1,
+  "exercise_answers": {
+    "question_1": "Zipping a project folder fails because it excludes the exact language runtime, OS-level system libraries (e.g. OpenSSL, glibc/musl), global system dependencies, build tools, native binary bindings compiled for a different CPU architecture, and environment configuration.",
+    "question_2": "Installing the same OS only provides an identical base kernel/distro starting point subject to configuration drift, repository update variance, and manual install sequence differences. Running the same container delivers an immutable, reproducible layer snapshot containing the exact runtime, pinned dependencies, system binaries, and configuration layout across any host environment."
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "step": "context",
+  "module": 6,
+  "concepts_synthesized": {
+    "circuit_breaker_state_machine": "Closed (normal traffic; trips when failures exceed threshold) -> Open (instant fail-fast/fallback protecting struggling dependency; waits reset timeout) -> Half-Open (allows single probe; closes on success, re-opens on failure).",
+    "exponential_backoff_with_jitter": "Exponential delay doubles recovery headroom (100ms, 200ms, 400ms, 800ms), while randomized jitter desynchronizes retry waves across thousands of clients to eliminate thundering herd collapse.",
+    "blast_radius_isolation": "Non-critical dependencies (e.g., recommendation widgets, secondary notification providers, cache) must have tight timeouts, circuit breakers, and explicit fallbacks so their failure never degrades core revenue or redirect paths."
+  }
+}

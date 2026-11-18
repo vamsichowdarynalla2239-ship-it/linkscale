@@ -20,7 +20,10 @@ const SENSITIVE_KEYS = new Set([
  */
 export function sanitizeLogString(val: string): string {
   if (typeof val !== 'string') return val;
-  return val.replace(/\r/g, '\\r').replace(/\n/g, '\\n');
+  return val
+    .replace(/:\/\/[^/\s:@]+:[^/\s@]+@/g, '://[REDACTED]@')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n');
 }
 
 /**
@@ -104,6 +107,7 @@ class Logger {
       timestamp: new Date().toISOString(), // Strictly UTC ISO-8601
       level,
       message: sanitizeLogString(message), // Neutralize CRLF in message
+      service_name: 'linkscale',
       ...sanitizedContext,
     };
 

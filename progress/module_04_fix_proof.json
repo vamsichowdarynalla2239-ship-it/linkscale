@@ -1,9 +1,14 @@
 {
-  "summary": "Completed Module 04 Step 6 FIX: remediated IDOR vulnerability by restoring tenant-scoped database predicate and verified regression pass.",
-  "evidence": [
-    "Patched link.service.ts getLinkById to enforce { id, tenantId: effectiveTenantId } via prisma.link.findFirst.",
-    "Ran scripts/verify-module-04.ts confirming cross-tenant access returns HTTP 404 Not Found, completely concealing resource existence.",
-    "Verified full 10-check regression pass covering unauthenticated 401s, IDOR defense, list isolation, public redirects, and dual-tier rate limiting (HTTP 429)."
-  ]
+  "step": "fix",
+  "module": 4,
+  "remediations_verified": {
+    "silent_failure_fix": "globalErrorHandler logs every unhandled 500 exception with level=error, request_id, sanitized error message, and stack trace alongside http_requests_total{status='500'} increment.",
+    "cardinality_bomb_fix": "Prometheus labels strictly limited to method, normalized route template (/r/:code, /links/:id), and status code; high-cardinality IDs confined to structured JSON logs.",
+    "request_id_propagation_fix": "requestIdMiddleware executes first in the Express pipeline, ensuring every access log, error log, and response header carries a non-null correlated request_id."
+  },
+  "three_pillar_proof": {
+    "logs": "Verified error-level JSON entry with request_id=req-500-drill, service_name=linkscale, and stack trace",
+    "metrics": "Verified http_requests_total{method='GET',path='/debug/simulate-error',status='500'} 1",
+    "alerts": "Verified 1/10 error rate (10%) exceeds HighErrorRate threshold (>5%) in infra/alerts.yml"
+  }
 }
-

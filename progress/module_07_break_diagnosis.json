@@ -1,0 +1,21 @@
+{
+  "step": "break",
+  "module": 7,
+  "diagnosed_runbook_failures": {
+    "scenario_a_config_and_name_drift": {
+      "symptom": "Diagnosis commands return 'No such container' or empty grep matches despite valid syntax",
+      "root_cause": "Documentation drifted behind infrastructure changes (e.g., container renamed or env var key changed without updating the runbook).",
+      "prevention": "Prepend a runtime discovery verification line (`docker ps --format 'table {{.Names}}\\t{{.Ports}}\\t{{.Status}}'`) at Step 0 and enforce runbook PR-review checklist checks whenever container names, ports, or env schemas change."
+    },
+    "scenario_b_missing_dependency_step": {
+      "symptom": "Every documented restart step succeeds, yet post-restart verification still fails",
+      "root_cause": "An undocumented operational prerequisite (e.g., background worker container, Redis sidecar, or Prisma migration/warm-up step) was added without updating the runbook.",
+      "prevention": "Enumerate all co-dependent services (`linkscale-api`, `linkops-postgres`, `linkops-redis`, worker process) in Step 0 topology verification and couple runbook review with architecture changes."
+    },
+    "scenario_c_ambiguous_target_or_port": {
+      "symptom": "curl returns Connection Refused on localhost:3000 or operator risks restarting the wrong container",
+      "root_cause": "Service listening port or multi-container replica naming diverged from hardcoded assumptions.",
+      "prevention": "Document exact container labels/filters (`docker ps --filter label=service=linkscale`) and confirm active listening port from container inspection before executing probes or restarts."
+    }
+  }
+}

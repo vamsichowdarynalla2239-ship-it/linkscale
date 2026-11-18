@@ -1,17 +1,17 @@
 name: ci
 
 on:
-  pull_request:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
 
 jobs:
-  api:
-    name: Build, Lint & Test API
+  pipeline:
+    name: Lint, Test, Build & Push
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/api
+    timeout-minutes: 15
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -21,22 +21,149 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: apps/api/package.json
+          cache-dependency-path: '**/package-lock.json'
 
       - name: Install dependencies
         run: npm ci
 
       - name: Generate Prisma Client
-        run: npx prisma generate
+        run: cd apps/api && npx prisma generate
 
-      - name: Typecheck and Build
+      - name: Run Linter
+        run: npm run lint
+
+      - name: Compile and Build
         run: npm run build
 
-      - name: Run Integration Test Suite
+      - name: Run Test Suite
         run: npm test
         env:
           NODE_ENV: test
           PORT: 3000
           DATABASE_URL: "file:./test.db"
           REDIS_URL: "redis://localhost:6379"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker Image
+        run: |
+          docker build -t myservice:${{ github.sha }} -t myservice:latest .
+
+      - name: Verify Image Size Guardrail (< 200MB)
+        run: |
+          SIZE_BYTES=$(docker image inspect myservice:${{ github.sha }} --format='{{.Size}}')
+          MAX_BYTES=209715200 # 200MB in bytes
+          SIZE_MB=$((SIZE_BYTES / 1024 / 1024))
+          echo "Built image size: ${SIZE_MB}MB (${SIZE_BYTES} bytes)"
+          if [ "$SIZE_BYTES" -gt "$MAX_BYTES" ]; then
+            echo "Error: Image size ${SIZE_MB}MB exceeds 200MB threshold!"
+            exit 1
+          fi
+          echo "Image size check passed: ${SIZE_MB}MB < 200MB"
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag and Push Container Image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          IMAGE_URI="ghcr.io/${{ github.repository }}:${{ github.sha }}"
+          LATEST_URI="ghcr.io/${{ github.repository }}:latest"
+          docker tag myservice:${{ github.sha }} "$IMAGE_URI"
+          docker tag myservice:latest "$LATEST_URI"
+          docker push "$IMAGE_URI"
+          docker push "$LATEST_URI"
+          echo "Successfully pushed production container image: $IMAGE_URI"
+
+  deploy:
+    name: Rolling Deploy, Verify & Auto-Rollback
+    needs: [pipeline]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Trigger Rolling Deploy with Immutable Git SHA
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          DEPLOY_URL: ${{ vars.PRODUCTION_URL }}
+        run: |
+          IMAGE_URI="ghcr.io/${{ github.repository }}:${{ github.sha }}"
+          echo "Deploying immutable image: $IMAGE_URI (strategy: rolling)"
+          if [ -n "$FLY_API_TOKEN" ]; then
+            curl -L https://fly.io/install.sh | sh
+            ~/.fly/bin/flyctl deploy --image "$IMAGE_URI" --strategy rolling --env APP_VERSION=${{ github.sha }} --yes
+          else
+            echo "FLY_API_TOKEN not configured; skipping remote trigger (CI validation mode)."
+          fi
+
+      - name: Wait for Readiness Probe (/ready == 200)
+        env:
+          DEPLOY_URL: ${{ vars.PRODUCTION_URL }}
+        run: |
+          if [ -z "$DEPLOY_URL" ]; then
+            echo "PRODUCTION_URL not set; skipping live readiness poll."
+            exit 0
+          fi
+          for i in $(seq 1 30); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$DEPLOY_URL/ready")
+            if [ "$STATUS" = "200" ]; then
+              echo "Readiness check passed on attempt $i"
+              exit 0
+            fi
+            echo "Attempt $i: /ready returned $STATUS, retrying in 10s..."
+            sleep 10
+          done
+          echo "ERROR: Readiness check failed after 30 attempts!"
+          exit 1
+
+      - name: Post-Deploy Smoke Verification (/live, /ready, /metrics, version SHA)
+        env:
+          DEPLOY_URL: ${{ vars.PRODUCTION_URL }}
+        run: |
+          if [ -z "$DEPLOY_URL" ]; then
+            echo "PRODUCTION_URL not set; skipping live smoke test."
+            exit 0
+          fi
+          LIVE_CODE=$(curl -s -o /tmp/live.json -w "%{http_code}" "$DEPLOY_URL/live")
+          READY_CODE=$(curl -s -o /tmp/ready.json -w "%{http_code}" "$DEPLOY_URL/ready")
+          METRICS_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$DEPLOY_URL/metrics")
+          cat /tmp/live.json
+          cat /tmp/ready.json
+          if [ "$LIVE_CODE" != "200" ] || [ "$READY_CODE" != "200" ] || [ "$METRICS_CODE" != "200" ]; then
+            echo "Smoke test failed: live=$LIVE_CODE ready=$READY_CODE metrics=$METRICS_CODE"
+            exit 1
+          fi
+          grep -q "${{ github.sha }}" /tmp/ready.json || { echo "Version SHA mismatch on /ready!"; exit 1; }
+
+          # Functional business-path smoke test (proves business logic works, not just SELECT 1)
+          BIZ_CODE=$(curl -s -o /tmp/biz.json -w "%{http_code}" -X POST "$DEPLOY_URL/notifications/send" \
+            -H "Content-Type: application/json" \
+            -d '{"channel":"email","recipient":"smoke@linkscale.internal","message":"post-deploy verification"}')
+          cat /tmp/biz.json
+          if [ "$BIZ_CODE" != "200" ] && [ "$BIZ_CODE" != "202" ]; then
+            echo "Business smoke check failed: POST /notifications/send returned $BIZ_CODE"
+            exit 1
+          fi
+          echo "Post-deploy verification (infra + business smoke) passed for SHA ${{ github.sha }}!"
+
+      - name: Automated Rollback on Verification Failure
+        if: failure()
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          echo "Deployment verification failed! Triggering automated rollback..."
+          if [ -n "$FLY_API_TOKEN" ]; then
+            ~/.fly/bin/flyctl releases rollback --yes
+          fi
 

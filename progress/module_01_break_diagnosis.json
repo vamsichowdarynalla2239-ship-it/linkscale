@@ -1,0 +1,16 @@
+{
+  "step": "break",
+  "module": 1,
+  "incident_symptoms": [
+    "Rebuilding image after trivial source code or comment edit triggers full dependency reinstall, leading to prolonged build times",
+    "Sensitive configuration files and extraneous workspace directories (.env, .git) are leaking into the Docker image layers"
+  ],
+  "root_causes": {
+    "defect_1_cache_invalidation": "Inversion of Dockerfile instructions where 'COPY . .' was placed prior to 'RUN npm install' / 'RUN npm ci'. Docker uses cryptographic layer hashing; modifying any file in the build context invalidates the COPY layer and all downstream layers, destroying cache reuse for the expensive dependency installation step.",
+    "defect_2_context_leakage": "Missing, deleted, or unreferenced .dockerignore file. Without .dockerignore, Docker CLI tarballs the entire workspace including '.env' (secrets and credentials), '.git' (full version control commit history), and local 'node_modules' into the build context, increasing upload size and leaking sensitive secrets into image layers."
+  },
+  "remediation_plan": [
+    "Enforce proper instruction layering: COPY package*.json ./ first, execute RUN npm ci, and only afterwards COPY application source code.",
+    "Restore and enforce .dockerignore to exclude .git, .env, .env.*, node_modules, and test files from the build context."
+  ]
+}

@@ -1,11 +1,23 @@
 {
-  "summary": "Completed Module 05 Step 3 BUILD: implemented uniform error envelopes, request ID tracing, structured JSON logging, and credential redaction.",
-  "evidence": [
-    "Built AppError hierarchy, requestIdMiddleware, loggingMiddleware, and globalErrorHandler in apps/api/src/.",
-    "Verified 400 validation, 401 auth, 404 not found, and 500 server errors return standard { error: { code, message, request_id } } envelope without leaking stack traces or internal secrets.",
-    "Executed sentinel test proving DO_NOT_LOG_ME_123 is masked with [REDACTED] in server stdout.",
-    "Validated structured log fields: timestamp, level, request_id, route, status_code, and latency_ms across all endpoints.",
-    "Captured full verification run in progress/evidence/module-05/error-logging-verification.txt."
+  "step": "build",
+  "module": 5,
+  "artifact": "docs/failure-mode-analysis.md",
+  "dependency_count": 6,
+  "failure_modes_documented": 12,
+  "simulations_executed": [
+    {
+      "simulation": "Database Stopped (ECONNREFUSED)",
+      "script": "scripts/verify-module-05-failure-modes.ts",
+      "observed_status": 503,
+      "observed_handler_latency_ms": 8.39,
+      "metrics_verified": "http_requests_total{method=\"GET\",path=\"/ready\",status=\"503\"} 1"
+    },
+    {
+      "simulation": "1ms AbortSignal Timeout vs 250ms Provider",
+      "script": "scripts/verify-module-05-failure-modes.ts",
+      "observed_error": "TimeoutError: The operation was aborted due to timeout",
+      "observed_latency_ms": 3,
+      "log_verified": "request_id=sim-timeout-1ms"
+    }
   ]
 }
-

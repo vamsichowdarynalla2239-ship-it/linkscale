@@ -1,10 +1,13 @@
 {
-  "summary": "Remediated pagination off-by-one defect by normalizing 1-indexed page parameter to 0-indexed database offset using (Math.max(1, page) - 1) * page_size, and extended test harness with boundary checks across pages 1..4.",
-  "evidence": [
-    "Offset calculation fixed in link.service.ts: const skip = (Math.max(1, page) - 1) * page_size",
-    "Boundary tests added in verify-module-08.ts testing pages 1..4 for 5 total items with page_size=2",
-    "Regression verification passed: Page 1 (2 items), Page 2 (2 items), Page 3 (1 item), Page 4 (0 items)",
-    "Confirmed zero cross-tenant leaks and strict HTTP 400 ceiling enforcement for page_size=500"
-  ]
+  "step": "fix",
+  "module": 8,
+  "remediations_implemented": {
+    "1_business_smoke_check": "Extended .github/workflows/ci.yml post-deploy smoke test to execute functional POST /notifications/send business check (expecting 200/202) alongside /live, /ready, /metrics, and version SHA match.",
+    "2_memory_leak_guardrail_and_alert": "Capped in-memory NotificationService.fallbackQueue at MAX_FALLBACK_QUEUE_SIZE=1000 (FIFO ring buffer) and added HighHeapMemoryUsage (>85% for 5m) Prometheus alert to infra/alerts.yml.",
+    "3_config_drift_detection": "Added non-secret SHA-256 CONFIG_FINGERPRINT (183ed1ef69cb) to apps/api/src/config/env.ts and GET /ready checks payload, plus documented Pre-OOM & Config Drift procedures in docs/runbooks/service-down.md."
+  },
+  "verification": {
+    "typescript_build": "PASSED",
+    "deploy_rollback_drill": "PASSED (12ms rollback to sha-v1-5cf9f89, v2 broken DB blocked at 503)"
+  }
 }
-

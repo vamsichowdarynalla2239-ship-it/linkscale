@@ -1,0 +1,21 @@
+{
+  "step": "break",
+  "module": 2,
+  "symptoms_and_root_causes": {
+    "symptom_1_secret_exposure": {
+      "observation": "Debug echo statements printing raw secret variables to standard output in CI runner",
+      "root_cause": "A developer inserted an echo command (e.g., echo $SECRET) to troubleshoot auth failures. Even if masked in some runners, base64 or sub-string formatting can expose credentials in plaintext build logs.",
+      "remediation": "Remove all echo statements of credentials. Use automated authentication actions (e.g. docker/login-action) that securely inject credentials into the Docker config without stdout exposure."
+    },
+    "symptom_2_pipeline_slowdown": {
+      "observation": "Pipeline runtime quadrupled despite no code changes",
+      "root_cause": "Misconfigured cache-dependency-path or invalidated cache key (e.g. hashing a wildcard directory that changes every commit or pointing to a nonexistent lockfile path), resulting in 100% cache misses and full package re-downloads.",
+      "remediation": "Pin cache keys strictly to the lockfile checksum (${{ hashFiles('**/package-lock.json') }}) so cache hits occur reliably across all commits unless dependencies actually change."
+    },
+    "symptom_3_unintended_deployments": {
+      "observation": "Feature branches pushing images to container registry",
+      "root_cause": "Missing branch conditional on registry push steps. Without 'if: github.event_name == 'push' && github.ref == 'refs/heads/main'', any branch push executes the push steps.",
+      "remediation": "Enforce explicit branch gating ('if: github.ref == 'refs/heads/main'') ensuring only verified commits on main trigger container registry publish."
+    }
+  }
+}

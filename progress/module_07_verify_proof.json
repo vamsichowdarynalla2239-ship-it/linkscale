@@ -1,9 +1,23 @@
 {
-  "summary": "Completed Module 07 Step 4 Verify by validating at-least-once queue delivery risks, database-level idempotency enforcement, and graceful degradation SLAs.",
-  "evidence": [
-    "Analyzed at-least-once queue semantics: post-commit ACK network failure and visibility timeout expiration cause redeliveries.",
-    "Validated exact-once persistence: ingress-minted eventId UUID coupled with storage-engine UNIQUE constraints and P2002 deduplication eliminates race conditions.",
-    "Confirmed graceful degradation under queue/DB outages: public redirect SLA preserved with zero HTTP 500s while dropped telemetry is logged."
-  ]
+  "step": "verify",
+  "module": 7,
+  "artifact_audit": {
+    "service_overview_complete": true,
+    "three_runbooks_complete": [
+      "docs/runbooks/high-error-rate.md",
+      "docs/runbooks/high-latency.md",
+      "docs/runbooks/service-down.md"
+    ],
+    "zero_command_placeholders": true,
+    "positive_and_negative_outputs_included": true,
+    "timed_escalation_paths_included": true,
+    "runbook_tested_live": {
+      "runbook": "docs/runbooks/high-error-rate.md",
+      "gaps_caught_and_fixed": 3
+    }
+  },
+  "conceptual_answers": {
+    "when_to_update_runbooks": "Update immediately (1) after every incident where the runbook was executed (fixing any stale command or unexpected output while fresh), (2) as part of every PR that changes endpoints, container names, env vars, or infrastructure topology, and (3) during scheduled quarterly GameDay chaos drills that empirically detect drift.",
+    "runbook_vs_wiki_page": "A wiki page is passive conceptual reference material explaining how a system works ('read at 2 PM'). A runbook is a deterministic, copy-pasteable emergency procedure engineered for an impaired brain under time pressure ('execute at 3 AM' — do step 1, verify exact output, do step 2, or escalate at minute 15)."
+  }
 }
-

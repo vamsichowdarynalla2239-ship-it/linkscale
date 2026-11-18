@@ -62,6 +62,73 @@ export function globalErrorHandler(
     return;
   }
 
+  // Classify known transient infrastructure failure modes (DNS, timeout, DB read-only/unavailable)
+  const errCode = String(err?.code || err?.cause?.code || '');
+  const errName = String(err?.name || '');
+  const errMsg = String(err?.message || '').toLowerCase();
+
+  if (errName === 'TimeoutError' || errName === 'AbortError' || errCode === 'ETIMEDOUT') {
+    logger.error(`Dependency timeout on ${req.method} ${req.originalUrl || req.url}`, {
+      request_id: requestId,
+      failure_mode: 'dependency_timeout',
+      transient: true,
+      route: req.originalUrl || req.url,
+      method: req.method,
+      error_message: err?.message,
+    });
+    res.status(504).json({
+      error: {
+        code: 'UPSTREAM_TIMEOUT',
+        message: 'Upstream dependency timed out. Please retry shortly.',
+        request_id: requestId,
+      },
+    });
+    return;
+  }
+
+  if (errCode === 'ENOTFOUND' || errCode === 'EAI_AGAIN' || errMsg.includes('getaddrinfo')) {
+    logger.error(`DNS resolution failure on ${req.method} ${req.originalUrl || req.url}`, {
+      request_id: requestId,
+      failure_mode: 'dns_resolution_failure',
+      transient: true,
+      route: req.originalUrl || req.url,
+      method: req.method,
+      error_code: errCode,
+    });
+    res.set('Retry-After', '5').status(503).json({
+      error: {
+        code: 'DEPENDENCY_UNREACHABLE',
+        message: 'Service temporarily unable to reach upstream dependency.',
+        request_id: requestId,
+      },
+    });
+    return;
+  }
+
+  if (
+    errCode === 'ECONNREFUSED' ||
+    errCode === 'P1001' ||
+    errMsg.includes('read-only') ||
+    errMsg.includes('readonly')
+  ) {
+    logger.error(`Storage unavailable or read-only on ${req.method} ${req.originalUrl || req.url}`, {
+      request_id: requestId,
+      failure_mode: 'database_unavailable_or_readonly',
+      transient: true,
+      route: req.originalUrl || req.url,
+      method: req.method,
+      error_code: errCode,
+    });
+    res.set('Retry-After', '5').status(503).json({
+      error: {
+        code: 'SERVICE_UNAVAILABLE',
+        message: 'Service temporarily degraded: storage is unavailable or read-only.',
+        request_id: requestId,
+      },
+    });
+    return;
+  }
+
   // Unhandled / programmer / unexpected error (500)
   logger.error(`Unhandled exception on ${req.method} ${req.originalUrl || req.url}: ${err?.message || err}`, {
     request_id: requestId,

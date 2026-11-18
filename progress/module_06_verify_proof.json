@@ -1,9 +1,15 @@
 {
-  "summary": "Completed Module 06 Step 4 Verify by validating distributed cache invalidation race conditions, multi-tenant key namespacing boundaries, and graceful degradation recovery protocols under Redis failure.",
-  "evidence": [
-    "Race conditions analyzed: concurrent read-replica lag and network partition dual-write divergence mitigated by active DEL eviction plus TTL jitter.",
-    "Tenant isolation verified: global redirect keys r:{code} separated from tenant-scoped administrative caches tenant:{tenantId}:link:{id}.",
-    "Redis outage resilience confirmed: 0.91ms cached latency, transparent fallback to Postgres on Redis drop with zero HTTP 500s, and jittered repopulation."
-  ]
+  "step": "verify",
+  "module": 6,
+  "functional_checklist": {
+    "1_explicit_timeouts": "Verified withTimeout (1000ms production / 200ms drill) wraps outbound provider calls; Redis configured with fast connect/command fallback; slow provider cut off in 207ms vs 3000ms stall.",
+    "2_circuit_opens_at_threshold": "Verified opossum tripped OPEN immediately upon reaching volumeThreshold=5 with >50% failure rate, emitting structured log event='circuit_opened'.",
+    "3_fast_fallback_under_100ms": "5 consecutive open-circuit requests served in 0ms total (0.0ms/req) using an isolated in-memory async retry queue with zero calls to the dead provider.",
+    "4_backoff_and_jitter_in_logs": "Verified retry_attempt logs showing non-uniform jittered exponential delays (attempt 1: 36ms, attempt 2: 68ms) and 0 retries on permanent 401 Unauthorized.",
+    "5_circuit_closes_on_recovery": "After resetTimeout, breaker emitted circuit_half_open, succeeded on probe, emitted circuit_closed, and reset Prometheus circuit_breaker_state gauge to 0."
+  },
+  "conceptual_answers": {
+    "product_fallback_ux": "For Notification Service (Scenario A), when an external provider circuit opens, POST /notifications/send returns HTTP 202 Accepted with { status: 'queued_fallback', degraded: true, queued_id }, guaranteeing zero lost notifications while transparently signaling async delayed delivery.",
+    "timeout_resource_math": "By Little's Law (L = lambda * W), at 100 req/s with a 20-slot pool, a 5s timeout demands 500 concurrent slots (25x pool exhaustion -> total freeze), whereas a 500ms timeout demands 50 slots and drains 10x faster, keeping healthy routes responsive until the circuit breaker opens."
+  }
 }
-

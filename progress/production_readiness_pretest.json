@@ -1,0 +1,28 @@
+{
+  "events": [
+    {
+      "module": 1,
+      "step": "pretest",
+      "event_type": "pretest",
+      "data": {
+        "self_rating": "strong",
+        "setup_check": {
+          "os": "Windows 11 (PowerShell)",
+          "node_version": "v22.17.1",
+          "git_version": "2.54.0.windows.1",
+          "curl_version": "8.22.0",
+          "docker_status": "docker CLI not in PATH"
+        },
+        "answers": {
+          "dockerfile_vs_image": "A Dockerfile is the declarative build recipe specifying dependencies and assembly steps, whereas a Docker image is the resulting immutable, layered executable artifact.",
+          "production_surprises": "1) High concurrency and burst traffic saturating database connection pools and file descriptors; 2) Network latency, distributed timeouts, and clock drift across multi-AZ cloud infrastructure.",
+          "liveness_vs_readiness": "Liveness determines if the container process is responsive or needs restarting, while readiness verifies that all runtime dependencies (database, Redis, message broker) are connected so the container can safely accept incoming traffic without throwing 503 errors.",
+          "deploy_degradation_action": "Check metrics (latency percentiles, error rates, error logs) first to isolate the degradation signature, then immediately execute an automated rollback if the failure impacts user SLA.",
+          "shipping_philosophy": "Ship small, frequent, and automated changes with canary verification, feature flags, and instant automated rollbacks so failures have minimal blast radius.",
+          "unmonitored_service_risk": "Zero errors on an unmonitored service is merely absence of visibility, not proof of health—it could be silently dropping background jobs, leaking memory, or accumulating corrupted records without detection until complete service collapse.",
+          "graceful_degradation": "Ensuring the critical user journey (e.g. link redirection) remains fully operational even when secondary downstream dependencies (e.g. analytics queue or click tracking) fail or are shed under load."
+        }
+      }
+    }
+  ]
+}

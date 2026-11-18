@@ -1,0 +1,8 @@
+{
+  "interlude": "Knight Capital -- $440 Million in 45 Minutes (August 2012)",
+  "reflection_answers": {
+    "question_1_fleet_version_verification": "Manual per-server deploys inevitably cause partial-fleet version skew. Automated immutable container deploys must expose the exact git commit SHA (`version`) on `/ready` and `/metrics` and run an automated post-deploy fleet assertion verifying 100% of running replicas report the target SHA before routing full production traffic.",
+    "question_2_dead_code_and_flag_hygiene": "Retaining dead code behind retired feature flags creates latent time bombs—especially when flag names are recycled. Engineering hygiene requires deleting dead code paths immediately after deprecation, forbidding reuse of retired flag keys via registry/linter enforcement, and gating unused config variables at startup.",
+    "question_3_active_damage_kill_switch": "Standard health checks only detect 'down', not 'up and actively harming users' (e.g., spam notification storm or erroneous financial execution). Defending against runaway active behavior requires per-user/global outbound rate caps, automated anomaly alerts on sudden volume spikes (>10x baseline), an instant feature/channel kill switch, and a tested <2-minute rollback procedure."
+  }
+}

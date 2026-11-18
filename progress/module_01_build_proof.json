@@ -1,0 +1,24 @@
+{
+  "step": "build",
+  "module": 1,
+  "base_image": "node:20-slim",
+  "build_strategy": "multi_stage",
+  "security_hardening": {
+    "user": "appuser",
+    "group": "appgroup",
+    "non_root": true,
+    "dockerignore_present": true,
+    "healthcheck_present": true,
+    "healthcheck_endpoint": "/live"
+  },
+  "artifacts": [
+    "Dockerfile",
+    ".dockerignore",
+    "apps/api/Dockerfile",
+    "apps/api/.dockerignore"
+  ],
+  "verification": {
+    "typescript_build": "passed",
+    "liveness_readiness_routes": ["/live", "/health", "/ready"]
+  }
+}

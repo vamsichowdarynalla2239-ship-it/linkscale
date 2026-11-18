@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "npm --workspace=@app/api run dev",
     "build": "npm --workspace=@app/api run build",
+    "lint": "npm --workspace=@app/api run lint",
     "start": "npm --workspace=@app/api run start",
     "worker": "npm --workspace=@app/api run worker",
     "test": "npm --workspace=@app/api run test"

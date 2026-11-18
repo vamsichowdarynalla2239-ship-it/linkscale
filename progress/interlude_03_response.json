@@ -1,0 +1,7 @@
+{
+  "interlude": "AWS S3 Outage (February 2017)",
+  "reflection_answers": {
+    "question_1_transitive_dependencies": "Transitive (N-hop) dependencies create hidden single points of failure: our Notification Service depends on SendGrid/Twilio/Firebase, which in turn depend on AWS US-EAST-1, S3, shared DNS providers, and certificate authorities. Because you cannot enumerate every N-hop dependency, resilience must rely on strict isolation boundaries—hard timeouts, per-provider circuit breakers, bulkheads, and multi-channel/multi-region fallback queues—so ANY downstream stall or outage degrades locally rather than propagating upstream.",
+    "question_2_failure_detection_resilience": "Failure detection must never share the same control/data plane as the system it monitors. Defending against broken health checks and dashboards requires: (1) keeping /live strictly in-process with zero external storage/S3 fetches, (2) running external multi-region synthetic black-box probes on an independent cloud provider, (3) implementing a dead-man's switch alert (Heartbeat/Watchdog) that pages on-call if telemetry silence occurs, and (4) hosting status pages on completely separate infrastructure."
+  }
+}

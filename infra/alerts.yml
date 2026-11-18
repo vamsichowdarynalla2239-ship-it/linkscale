@@ -1,0 +1,66 @@
+groups:
+  - name: linkscale_golden_signals
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total[5m])) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          service: linkscale
+        annotations:
+          summary: "Error rate exceeds 5%"
+          description: >
+            The service {{ $labels.service }} has a 5xx error rate of
+            {{ $value | humanizePercentage }} over the last 5 minutes,
+            sustained for more than 2 minutes. More than 1 in 20 requests is failing.
+          runbook: "docs/runbooks/high-error-rate.md"
+
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 2
+        for: 3m
+        labels:
+          severity: warning
+          service: linkscale
+        annotations:
+          summary: "95th percentile latency exceeds 2 seconds"
+          description: >
+            The service {{ $labels.service }} has p95 latency of
+            {{ $value | humanizeDuration }} over the last 5 minutes.
+            5% of requests are taking longer than 2 seconds.
+          runbook: "docs/runbooks/high-latency.md"
+
+      - alert: ServiceDown
+        expr: up{job="linkscale"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: linkscale
+        annotations:
+          summary: "Service is down"
+          description: >
+            Instance {{ $labels.instance }} has been unreachable by the
+            Prometheus scraper on GET /metrics for more than 1 minute.
+          runbook: "docs/runbooks/service-down.md"
+
+      - alert: HighHeapMemoryUsage
+        expr: |
+          nodejs_heap_size_used_bytes{job="linkscale"}
+          /
+          nodejs_heap_size_total_bytes{job="linkscale"} > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          service: linkscale
+        annotations:
+          summary: "Node.js heap usage exceeds 85% (potential memory leak)"
+          description: >
+            Instance {{ $labels.instance }} has sustained heap memory usage above 85%
+            for more than 5 minutes. Inspect for unbounded collections or listener leaks
+            before cgroup OOM-kill occurs.
+          runbook: "docs/runbooks/service-down.md"
